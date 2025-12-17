@@ -491,6 +491,69 @@ async def get_machines_endpoint():
     }
 
 
+# ============ MACHINE METRICS ============
+
+# Cache des metriques par machine (node_id -> {cpu, ram, gpu, disk, timestamp})
+_metrics_cache: Dict[str, Dict] = {}
+
+@app.get("/api/metrics")
+async def get_all_metrics():
+    """
+    Retourne les metriques systeme de toutes les machines.
+    Format: { "node_id": { "cpu": 0-100, "ram": 0-100, "gpu": 0-100, "disk": 0-100 }, ... }
+    """
+    # Recuperer les machines pour avoir les node_ids
+    machines = await core_client.get_all_machines()
+
+    result = {}
+    for machine in machines:
+        node_id = machine.get("node_id")
+        if node_id and node_id in _metrics_cache:
+            result[node_id] = _metrics_cache[node_id]
+
+    return result
+
+
+@app.post("/api/metrics/{node_id}")
+async def receive_metrics(node_id: str, metrics: Dict):
+    """
+    Recoit les metriques d'une machine (envoye par OnyxHeart).
+    Attend: { "cpu": 0-100, "ram": 0-100, "gpu": 0-100, "disk": 0-100 }
+    """
+    try:
+        # Valider et normaliser les metriques
+        validated = {
+            "cpu": max(0, min(100, metrics.get("cpu", 0))),
+            "ram": max(0, min(100, metrics.get("ram", 0))),
+            "gpu": max(0, min(100, metrics.get("gpu", 0))),
+            "disk": max(0, min(100, metrics.get("disk", 0))),
+            "timestamp": datetime.now().isoformat()
+        }
+
+        _metrics_cache[node_id] = validated
+
+        # Broadcast aux clients WebSocket (optionnel, pour updates en temps reel)
+        await manager.broadcast({
+            "type": "metrics_update",
+            "node_id": node_id,
+            "metrics": validated
+        })
+
+        return {"success": True, "node_id": node_id}
+
+    except Exception as e:
+        logger.error(f"Error receiving metrics for {node_id}: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/metrics/{node_id}")
+async def get_machine_metrics(node_id: str):
+    """Retourne les metriques d'une machine specifique"""
+    if node_id in _metrics_cache:
+        return _metrics_cache[node_id]
+    raise HTTPException(status_code=404, detail=f"No metrics for {node_id}")
+
+
 # ============ STATUS RECEIVER ============
 
 @app.post("/status")

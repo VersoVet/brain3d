@@ -245,12 +245,20 @@
         <div class="legend-item"><div class="legend-color" style="background: #888888;"></div>Offline / Down</div>
         <div class="legend-item"><div class="legend-color pulsing" style="background: #ff00ff;"></div>Working</div>
         <div class="legend-item"><div class="legend-color" style="background: #ff4444;"></div>Error</div>
+        <div id="legend-metrics" style="display:none; margin-top: 12px; border-top: 1px solid #333; padding-top: 8px;">
+            <h4>Metrics</h4>
+            <div class="legend-item"><div class="legend-color" style="background: #00ff88;"></div>CPU</div>
+            <div class="legend-item"><div class="legend-color" style="background: #00aaff;"></div>RAM</div>
+            <div class="legend-item"><div class="legend-color" style="background: #ff00ff;"></div>GPU</div>
+            <div class="legend-item"><div class="legend-color" style="background: #ffaa00;"></div>Disk</div>
+        </div>
     </div>
 
     <div id="controls">
         <button id="btn-back" onclick="goBack()" style="display:none;">← Back</button>
         <button id="btn-reset" onclick="resetCamera()">Reset View</button>
         <button id="btn-rotate" onclick="toggleRotation()">Auto-Rotate</button>
+        <button id="btn-monitoring" onclick="toggleMonitoring()">📊 Monitoring</button>
     </div>
 
     <div id="click-hint">Click on a machine to explore inside</div>
@@ -262,7 +270,7 @@
         // ========== CONFIGURATION ==========
         const COLORS = {
             up: 0x00ff88, online: 0x00ff88, running: 0x00ff88,
-            down: 0x888888, offline: 0x888888, off: 0x888888, stopped: 0x888888,
+            down: 0x888888, offline: 0x888888, off: 0x888888, stopped: 0x888888, idle: 0x888888,
             working: 0xff00ff, busy: 0xff00ff,
             error: 0xff4444, failed: 0xff4444,
             unknown: 0x555555,
@@ -274,6 +282,27 @@
             background: 0x0a0a0f,
             grid: 0x1a1a2e
         };
+
+        // Couleurs pour les metriques systeme (monitoring)
+        const METRIC_COLORS = {
+            cpu: 0x00ff88,    // Vert - processeur
+            ram: 0x00aaff,    // Bleu - memoire
+            gpu: 0xff00ff,    // Magenta - GPU
+            disk: 0xffaa00    // Orange - disque
+        };
+
+        // Positions des spheres de metriques dans le cube (relatif au centre)
+        const METRIC_POSITIONS = {
+            cpu:  { x: -1.5, y: 1.5, z: 0 },
+            ram:  { x: 1.5, y: 1.5, z: 0 },
+            gpu:  { x: -1.5, y: -1.5, z: 0 },
+            disk: { x: 1.5, y: -1.5, z: 0 }
+        };
+
+        // Etat du monitoring (desactive par defaut)
+        let monitoringEnabled = false;
+        let monitoringInterval = null;
+        const MONITORING_REFRESH_MS = 2000;  // Rafraichissement toutes les 2 secondes
 
         // Couleur uniforme pour toutes les aires cerebrales (cyan/turquoise)
         const AREA_DEFAULT_COLOR = 0x00d4aa;
@@ -449,6 +478,11 @@
                     updateStats();
                 } else if (msg.type === 'status_update') {
                     handleStatusUpdate(msg.data);
+                } else if (msg.type === 'metrics_update') {
+                    // Mise a jour des metriques en temps reel via WebSocket
+                    if (monitoringEnabled && msg.node_id && msg.metrics) {
+                        updateMachineMetrics(msg.node_id, msg.metrics);
+                    }
                 }
             };
         }
@@ -622,6 +656,32 @@
             const icon = getDeviceIcon(machine);
             createLabel(machine.hostname || machine.node_id, mesh, size * 0.8, icon);
 
+            // Creer les spheres de metriques (cachees par defaut)
+            const metricSpheres = {};
+            const metricSize = size * 0.12;  // Petites spheres
+
+            for (const [metricName, color] of Object.entries(METRIC_COLORS)) {
+                const pos = METRIC_POSITIONS[metricName];
+                const sphereGeo = new THREE.SphereGeometry(metricSize, 16, 16);
+                const sphereMat = new THREE.MeshBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0.9
+                });
+                const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+                sphere.position.set(pos.x, pos.y, pos.z);
+                sphere.visible = false;  // Cache par defaut
+                sphere.userData = {
+                    type: 'metric',
+                    metric: metricName,
+                    baseScale: 1.0,
+                    pulsePhase: Math.random() * Math.PI * 2,  // Phase aleatoire pour desynchroniser
+                    value: 0  // Valeur de charge 0-100
+                };
+                mesh.add(sphere);
+                metricSpheres[metricName] = sphere;
+            }
+
             // Stocker avec infos pour updates
             meshes.machines[machine.node_id] = {
                 mesh,
@@ -630,7 +690,8 @@
                 machine,
                 isSoma,
                 baseColor,
-                skillStatuses: {}
+                skillStatuses: {},
+                metricSpheres  // Ajouter les spheres de metriques
             };
 
             // Calculer le status initial basé sur les skills
@@ -993,23 +1054,30 @@
 
         // Determine actual skill status from various fields
         function getSkillStatus(skill) {
-            // Check live_status first (from realtime updates)
+            // Check live_status first (from realtime updates via Brain3D)
             if (skill.live_status) return skill.live_status;
 
-            // Check runtime_status object
+            // Check runtime_status object (from OnyxCore API)
             if (skill.runtime_status) {
                 if (skill.runtime_status.online === true) return 'running';
                 if (skill.runtime_status.online === false) return 'off';
             }
 
-            // Check online field (1/0)
+            // Check online field (1/0) from OnyxCore
             if (skill.online === 1 || skill.online === true) return 'running';
             if (skill.online === 0 || skill.online === false) return 'off';
 
             // Check status field
             if (skill.status === 'prod' || skill.status === 'dev') {
-                // Status is deployment status, not runtime - check online
+                // Status is deployment status, not runtime
                 return 'off';
+            }
+
+            // OnyxHeart reports "running" for registered skills even if not active
+            // Without online field, we can't know if it's really running
+            // Consider it "idle" (grey) until we get a live_status update
+            if (skill.status === 'running' && (skill.online === undefined || skill.online === null)) {
+                return 'idle';
             }
 
             return skill.status || 'unknown';
@@ -1083,7 +1151,7 @@
                     const tubePos = new THREE.Vector3(x, y, z);
 
                     // Create connection line from tube to area
-                    createConnection(tubePos, areaPos, getStatusColor(skill.status || 'unknown'), 0.3);
+                    createConnection(tubePos, areaPos, getStatusColor(getSkillStatus(skill)), 0.3);
                 }
             });
         }
@@ -1146,14 +1214,14 @@
                 createConnection(
                     new THREE.Vector3(x, 0, z),
                     new THREE.Vector3(0, 15, 0),
-                    getStatusColor(skill.status),
+                    getStatusColor(getSkillStatus(skill)),
                     0.1
                 );
             });
         }
 
         function createLocalSkill(skill, x, y, z, machineIp) {
-            const status = skill.status || skill.live_status || 'unknown';
+            const status = getSkillStatus(skill);
             const color = getStatusColor(status);
 
             const skillGeo = new THREE.SphereGeometry(1.5, 24, 24);
@@ -1356,7 +1424,7 @@
                         ${(m.skills || []).length === 0 ? '<p style="color:#666">No skills registered</p>' :
                           (m.skills || []).map(s => `
                             <div class="skill-item">
-                                <div class="skill-dot" style="background:${getStatusColorHex(s.status||s.live_status||'unknown')}"></div>
+                                <div class="skill-dot" style="background:${getStatusColorHex(getSkillStatus(s))}"></div>
                                 <div>
                                     <div>${s.display_name || s.skill_name || s.name}</div>
                                     <div style="font-size:0.75em;color:#666">Port ${s.port||'?'} • ${s.brain_area||'?'}</div>
@@ -1388,7 +1456,7 @@
                 title.textContent = '⚡ ' + (s.display_name || s.skill_name || s.name);
                 html = `
                     <div class="stat-row"><span class="stat-label">Name</span><span class="stat-value">${s.name || s.skill_name}</span></div>
-                    <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" style="color:${getStatusColorHex(s.status||s.live_status)}">${s.status||s.live_status||'unknown'}</span></div>
+                    <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" style="color:${getStatusColorHex(getSkillStatus(s))}">${getSkillStatus(s)}</span></div>
                     <div class="stat-row"><span class="stat-label">Port</span><span class="stat-value">${s.port || 'N/A'}</span></div>
                     <div class="stat-row"><span class="stat-label">Brain Area</span><span class="stat-value">${s.brain_area_id || s.brain_area || 'N/A'}</span></div>
                     <div class="stat-row"><span class="stat-label">Category</span><span class="stat-value">${s.category || 'N/A'}</span></div>
@@ -1404,7 +1472,7 @@
                     <div class="skill-list">
                         ${(a.skills || []).map(s => `
                             <div class="skill-item">
-                                <div class="skill-dot" style="background:${getStatusColorHex(s.live_status||'unknown')}"></div>
+                                <div class="skill-dot" style="background:${getStatusColorHex(getSkillStatus(s))}"></div>
                                 <span>${s.display_name || s.name}</span>
                             </div>
                         `).join('')}
@@ -1469,7 +1537,7 @@
         function getStatusColorHex(status) {
             const colors = {
                 up: '#00ff88', online: '#00ff88', running: '#00ff88',
-                down: '#888888', offline: '#888888', off: '#888888', stopped: '#888888',
+                down: '#888888', offline: '#888888', off: '#888888', stopped: '#888888', idle: '#888888',
                 working: '#ff00ff', busy: '#ff00ff',
                 error: '#ff4444', failed: '#ff4444'
             };
@@ -1696,6 +1764,136 @@
             document.getElementById('btn-rotate').classList.toggle('active', autoRotate);
         }
 
+        // ========== MONITORING SYSTEM ==========
+        function toggleMonitoring() {
+            monitoringEnabled = !monitoringEnabled;
+            document.getElementById('btn-monitoring').classList.toggle('active', monitoringEnabled);
+
+            // Afficher/masquer la legende des metriques
+            const legendMetrics = document.getElementById('legend-metrics');
+            if (legendMetrics) {
+                legendMetrics.style.display = monitoringEnabled ? 'block' : 'none';
+            }
+
+            if (monitoringEnabled) {
+                // Afficher toutes les spheres de metriques
+                showAllMetricSpheres();
+                // Demarrer le polling des metriques
+                startMonitoringPolling();
+                console.log('[Brain3D] Monitoring enabled');
+            } else {
+                // Cacher toutes les spheres de metriques
+                hideAllMetricSpheres();
+                // Arreter le polling
+                stopMonitoringPolling();
+                console.log('[Brain3D] Monitoring disabled');
+            }
+        }
+
+        function showAllMetricSpheres() {
+            for (const nodeId in meshes.machines) {
+                const machineData = meshes.machines[nodeId];
+                if (machineData.metricSpheres) {
+                    for (const metricName in machineData.metricSpheres) {
+                        machineData.metricSpheres[metricName].visible = true;
+                    }
+                }
+            }
+        }
+
+        function hideAllMetricSpheres() {
+            for (const nodeId in meshes.machines) {
+                const machineData = meshes.machines[nodeId];
+                if (machineData.metricSpheres) {
+                    for (const metricName in machineData.metricSpheres) {
+                        machineData.metricSpheres[metricName].visible = false;
+                    }
+                }
+            }
+        }
+
+        function startMonitoringPolling() {
+            if (monitoringInterval) clearInterval(monitoringInterval);
+            // Premiere requete immediatement
+            fetchMetrics();
+            // Puis toutes les X secondes
+            monitoringInterval = setInterval(fetchMetrics, MONITORING_REFRESH_MS);
+        }
+
+        function stopMonitoringPolling() {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+                monitoringInterval = null;
+            }
+        }
+
+        async function fetchMetrics() {
+            try {
+                const response = await fetch('/api/metrics');
+                if (response.ok) {
+                    const metricsData = await response.json();
+                    updateAllMetrics(metricsData);
+                }
+            } catch (e) {
+                console.error('[Brain3D] Failed to fetch metrics:', e);
+            }
+        }
+
+        function updateAllMetrics(metricsData) {
+            // metricsData = { "node_id": { cpu: 45, ram: 67, gpu: 0, disk: 23 }, ... }
+            for (const nodeId in metricsData) {
+                const metrics = metricsData[nodeId];
+                updateMachineMetrics(nodeId, metrics);
+            }
+        }
+
+        function updateMachineMetrics(nodeId, metrics) {
+            const machineData = meshes.machines[nodeId];
+            if (!machineData || !machineData.metricSpheres) return;
+
+            for (const metricName in metrics) {
+                const sphere = machineData.metricSpheres[metricName];
+                if (sphere) {
+                    // Valeur de 0 a 100
+                    const value = Math.min(100, Math.max(0, metrics[metricName] || 0));
+                    sphere.userData.value = value;
+
+                    // Ajuster l'opacite selon la charge (plus charge = plus visible)
+                    const minOpacity = 0.3;
+                    const maxOpacity = 1.0;
+                    sphere.material.opacity = minOpacity + (value / 100) * (maxOpacity - minOpacity);
+                }
+            }
+        }
+
+        // Animation des spheres de metriques (pulsation selon charge)
+        function animateMetricSpheres() {
+            if (!monitoringEnabled) return;
+
+            for (const nodeId in meshes.machines) {
+                const machineData = meshes.machines[nodeId];
+                if (!machineData || !machineData.metricSpheres) continue;
+
+                for (const metricName in machineData.metricSpheres) {
+                    const sphere = machineData.metricSpheres[metricName];
+                    if (!sphere.visible) continue;
+
+                    const value = sphere.userData.value || 0;
+                    const phase = sphere.userData.pulsePhase || 0;
+
+                    // Frequence de pulsation proportionnelle a la charge
+                    // Charge 0% = pas de pulsation, Charge 100% = pulsation rapide
+                    const pulseSpeed = 1 + (value / 100) * 4;  // 1 a 5 Hz
+                    const pulseAmplitude = 0.1 + (value / 100) * 0.4;  // 10% a 50% d'amplitude
+
+                    // Calculer le facteur de pulsation
+                    const pulse = 1 + Math.sin(animationTime * pulseSpeed + phase) * pulseAmplitude;
+
+                    sphere.scale.setScalar(pulse);
+                }
+            }
+        }
+
         function onResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
@@ -1770,6 +1968,9 @@
                     }
                 });
             });
+
+            // Animer les spheres de metriques (pulsation)
+            animateMetricSpheres();
 
             renderer.render(scene, camera);
         }
