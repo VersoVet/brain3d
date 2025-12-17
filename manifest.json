@@ -1,0 +1,32 @@
+{
+  "name": "brain3d",
+  "display_name": "Brain3D Visualizer",
+  "version": "2.0.0",
+  "description": "Visualisation 3D temps reel du cerveau Onyx",
+  "long_description": "Interface de monitoring 3D interactive affichant l'etat des skills et aires cerebrales. Connexion WebSocket pour mises a jour en temps reel. Vues: cerveau global, detail par aire, reseau machines.",
+  "category": "monitoring",
+  "brain_area": "cortex-prefrontal",
+  "author": "Onyx",
+  "icon": "🧠",
+  "color": "#00d4aa",
+  "port": 8888,
+  "mcp_port": 8900,
+  "protocol": "http",
+  "has_web_ui": true,
+  "web_url": "http://10.0.0.11:8888",
+  "health_endpoint": "/health",
+  "critical": true,
+  "priority": 1,
+  "endpoints": [
+    {"method": "GET", "path": "/", "description": "Page principale Brain3D"},
+    {"method": "GET", "path": "/health", "description": "Health check"},
+    {"method": "GET", "path": "/architecture", "description": "Architecture 3D complete"},
+    {"method": "GET", "path": "/areas/{area_id}", "description": "Detail d'une aire cerebrale"},
+    {"method": "GET", "path": "/states", "description": "Etats actuels des skills"},
+    {"method": "GET", "path": "/connections", "description": "Stats WebSocket"},
+    {"method": "WS", "path": "/ws", "description": "WebSocket temps reel"},
+    {"method": "WS", "path": "/ws/area/{area_id}", "description": "WebSocket filtre par aire"}
+  ],
+  "dependencies": [],
+  "tags": ["monitoring", "3d", "visualization", "websocket", "real-time"]
+}
