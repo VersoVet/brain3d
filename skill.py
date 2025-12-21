@@ -40,7 +40,7 @@ import uvicorn
 SKILL_DIR = Path(__file__).parent
 CORE_API_URL = os.environ.get("ONYX_CORE_URL", "http://10.0.0.11:8000")
 NETWORK_INVENTORY_URL = os.environ.get("NETWORK_INVENTORY_URL", "http://10.0.0.11:8053")
-PORT = int(os.environ.get("BRAIN3D_PORT", "8888"))
+PORT = int(os.environ.get("BRAIN3D_PORT", "9888"))  # Dev: 9888, Prod: 8888
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("brain3d")
@@ -104,6 +104,7 @@ class StatusEvent:
     progress: int = 0
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     metadata: Dict = field(default_factory=dict)
+    host: Optional[str] = None  # IP de la machine distante (None = OnyxSoma)
 
 
 @dataclass
@@ -347,20 +348,37 @@ async def startup():
     logger.info(f"Brain3D starting on port {PORT}")
     logger.info(f"Core API: {CORE_API_URL}")
 
-    # Emettre notre status vers OnyxCore
+    # S'abonner a OnyxCore pour recevoir les events en temps reel
+    my_url = f"http://10.0.0.11:{PORT}"
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{CORE_API_URL}/api/subscribe",
+                json={"url": my_url}
+            )
+            if resp.status_code == 200:
+                logger.info(f"Subscribed to OnyxCore for real-time events")
+            else:
+                logger.warning(f"Subscribe failed: {resp.text}")
+    except Exception as e:
+        logger.warning(f"Could not subscribe to Core: {e}")
+
+    # Emettre notre status vers OnyxHeart local (qui forward a OnyxCore)
+    heart_url = os.environ.get("ONYX_HEART_URL", "http://localhost:8900")
     try:
         async with httpx.AsyncClient() as client:
             await client.post(
-                f"{CORE_API_URL}/status",
+                f"{heart_url}/skills/status",
                 json={
                     "skill_name": "brain3d",
                     "status": "up",
                     "brain_area": "cortex-prefrontal",
-                    "task": "Brain3D Visualizer ready"
+                    "task": "Brain3D ready"
                 }
             )
+            logger.info("Notified OnyxHeart of startup")
     except Exception as e:
-        logger.warning(f"Could not notify Core: {e}")
+        logger.warning(f"Could not notify OnyxHeart: {e}")
 
     # Start MCP server
     run_mcp_background(core_client=core_client)
@@ -368,6 +386,34 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
+    # Se desabonner d'OnyxCore
+    my_url = f"http://10.0.0.11:{PORT}"
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.request(
+                "DELETE",
+                f"{CORE_API_URL}/api/subscribe",
+                json={"url": my_url}
+            )
+    except Exception:
+        pass
+
+    # Notifier OnyxHeart de l'arret
+    heart_url = os.environ.get("ONYX_HEART_URL", "http://localhost:8900")
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{heart_url}/skills/status",
+                json={
+                    "skill_name": "brain3d",
+                    "status": "down",
+                    "brain_area": "cortex-prefrontal",
+                    "task": "Shutting down"
+                }
+            )
+    except Exception:
+        pass
+
     await core_client.close()
     logger.info("Brain3D shutdown")
 
@@ -381,6 +427,47 @@ async def health():
         "skill": "brain3d",
         "version": "2.0.0",
         "connections": len(manager.active_connections)
+    }
+
+
+@app.get("/status")
+async def status():
+    """Status detaille du skill Brain3D"""
+    skills = await core_client.get_skills()
+    machines = await core_client.get_all_machines()
+
+    # Compter les skills par status
+    status_counts = {}
+    for skill in skills:
+        s = skill.get("status", "unknown")
+        status_counts[s] = status_counts.get(s, 0) + 1
+
+    # Machines online
+    machines_online = sum(1 for m in machines if m.get("status") == "online")
+
+    return {
+        "skill": "brain3d",
+        "version": "2.0.0",
+        "status": "running",
+        "uptime": datetime.now().isoformat(),
+        "websocket": {
+            "active_connections": len(manager.active_connections),
+            "cached_statuses": len(manager.status_cache)
+        },
+        "core_api": {
+            "url": CORE_API_URL,
+            "connected": core_client is not None
+        },
+        "data": {
+            "total_skills": len(skills),
+            "skills_by_status": status_counts,
+            "total_machines": len(machines),
+            "machines_online": machines_online
+        },
+        "config": {
+            "port": PORT,
+            "skill_dir": str(SKILL_DIR)
+        }
     }
 
 
@@ -521,12 +608,13 @@ async def receive_metrics(node_id: str, metrics: Dict):
     Attend: { "cpu": 0-100, "ram": 0-100, "gpu": 0-100, "disk": 0-100 }
     """
     try:
-        # Valider et normaliser les metriques
+        # Valider et normaliser les metriques (5 parametres)
         validated = {
             "cpu": max(0, min(100, metrics.get("cpu", 0))),
-            "ram": max(0, min(100, metrics.get("ram", 0))),
             "gpu": max(0, min(100, metrics.get("gpu", 0))),
+            "ram": max(0, min(100, metrics.get("ram", 0))),
             "disk": max(0, min(100, metrics.get("disk", 0))),
+            "net": max(0, min(100, metrics.get("net", 0))),
             "timestamp": datetime.now().isoformat()
         }
 
@@ -579,16 +667,15 @@ async def receive_status(event: Dict):
             brain_area=event.get("brain_area", "external"),
             task=event.get("task", ""),
             progress=event.get("progress", 0),
-            metadata=event.get("metadata", {})
+            metadata=event.get("metadata", {}),
+            host=event.get("host")  # None si pas de host = OnyxSoma
         )
 
         # Cache le status
         manager.update_status_cache(status_event)
 
-        # Broadcast aux clients (inclure host pour skills distants)
+        # Broadcast aux clients (host inclus dans status_event)
         broadcast_data = asdict(status_event)
-        if "host" in event:
-            broadcast_data["host"] = event["host"]
 
         await manager.broadcast({
             "type": "status_update",

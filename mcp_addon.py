@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 SKILL_NAME = "brain3d"
-MCP_PORT = 8988
+MCP_PORT = 9988  # Dev port (REST 9888 + 100)
 SKILL_VERSION = "2.0.0"
 ONYX_BASE = Path("/mnt/verso-data/cluster/apps/onyx")
 

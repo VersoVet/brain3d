@@ -242,15 +242,17 @@
     <div id="legend">
         <h4>Status</h4>
         <div class="legend-item"><div class="legend-color" style="background: #00ff88;"></div>Online / Up</div>
-        <div class="legend-item"><div class="legend-color" style="background: #888888;"></div>Offline / Down</div>
+        <div class="legend-item"><div class="legend-color" style="background: #6699cc;"></div>Idle (PC on)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #555555;"></div>Offline (PC off)</div>
         <div class="legend-item"><div class="legend-color pulsing" style="background: #ff00ff;"></div>Working</div>
         <div class="legend-item"><div class="legend-color" style="background: #ff4444;"></div>Error</div>
         <div id="legend-metrics" style="display:none; margin-top: 12px; border-top: 1px solid #333; padding-top: 8px;">
-            <h4>Metrics</h4>
-            <div class="legend-item"><div class="legend-color" style="background: #00ff88;"></div>CPU</div>
-            <div class="legend-item"><div class="legend-color" style="background: #00aaff;"></div>RAM</div>
-            <div class="legend-item"><div class="legend-color" style="background: #ff00ff;"></div>GPU</div>
-            <div class="legend-item"><div class="legend-color" style="background: #ffaa00;"></div>Disk</div>
+            <h4>Monitoring</h4>
+            <div class="legend-item"><div class="legend-color pulsing" style="background: #ff4444;"></div>CPU</div>
+            <div class="legend-item"><div class="legend-color pulsing" style="background: #aa44ff;"></div>GPU</div>
+            <div class="legend-item"><div class="legend-color pulsing" style="background: #4488ff;"></div>RAM</div>
+            <div class="legend-item"><div class="legend-color pulsing" style="background: #44ff88;"></div>DISK</div>
+            <div class="legend-item"><div class="legend-color pulsing" style="background: #ff8844;"></div>NET</div>
         </div>
     </div>
 
@@ -270,10 +272,11 @@
         // ========== CONFIGURATION ==========
         const COLORS = {
             up: 0x00ff88, online: 0x00ff88, running: 0x00ff88,
-            down: 0x888888, offline: 0x888888, off: 0x888888, stopped: 0x888888, idle: 0x888888,
+            down: 0x555555, offline: 0x555555, off: 0x555555, stopped: 0x555555,  // Gris fonce = eteint
+            idle: 0x6699cc,  // Bleu pastel = allume mais aucun skill actif
             working: 0xff00ff, busy: 0xff00ff,
             error: 0xff4444, failed: 0xff4444,
-            unknown: 0x555555,
+            unknown: 0x444444,
             onyxcore: 0x00d4aa,
             onyxheart: 0xff6b35,
             networkdevice: 0x4488ff,  // Bleu pour machines sans OnyxHeart
@@ -283,20 +286,22 @@
             grid: 0x1a1a2e
         };
 
-        // Couleurs pour les metriques systeme (monitoring)
-        const METRIC_COLORS = {
-            cpu: 0x00ff88,    // Vert - processeur
-            ram: 0x00aaff,    // Bleu - memoire
-            gpu: 0xff00ff,    // Magenta - GPU
-            disk: 0xffaa00    // Orange - disque
+        // Configuration des 5 metriques avec couleurs
+        const METRIC_CONFIG = {
+            cpu:  { color: 0xff4444, order: 0 },  // Rouge
+            gpu:  { color: 0xaa44ff, order: 1 },  // Violet
+            ram:  { color: 0x4488ff, order: 2 },  // Bleu
+            disk: { color: 0x44ff88, order: 3 },  // Vert
+            net:  { color: 0xff8844, order: 4 }   // Orange
         };
 
-        // Positions des spheres de metriques dans le cube (relatif au centre)
-        const METRIC_POSITIONS = {
-            cpu:  { x: -1.5, y: 1.5, z: 0 },
-            ram:  { x: 1.5, y: 1.5, z: 0 },
-            gpu:  { x: -1.5, y: -1.5, z: 0 },
-            disk: { x: 1.5, y: -1.5, z: 0 }
+        // Couleurs hex pour legende et affichage
+        const METRIC_COLORS_HEX = {
+            cpu:  '#ff4444',  // Rouge
+            gpu:  '#aa44ff',  // Violet
+            ram:  '#4488ff',  // Bleu
+            disk: '#44ff88',  // Vert
+            net:  '#ff8844'   // Orange
         };
 
         // Etat du monitoring (desactive par defaut)
@@ -443,6 +448,7 @@
             // Events
             window.addEventListener('resize', onResize);
             renderer.domElement.addEventListener('click', onClick);
+            renderer.domElement.addEventListener('dblclick', onDoubleClick);
             renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
             renderer.domElement.addEventListener('mousemove', onMouseMove);
 
@@ -642,56 +648,75 @@
             const wireframe = new THREE.LineSegments(edges, edgeMat);
             mesh.add(wireframe);
 
-            // Inner glow sphere
-            const glowGeo = new THREE.SphereGeometry(size * 0.2, 32, 32);
-            const glowMat = new THREE.MeshBasicMaterial({
-                color: baseColor,
+            // Heart visible (octaèdre orange) - toujours visible
+            const heartSize = size * 0.25;
+            const heartGeo = new THREE.OctahedronGeometry(heartSize);
+            const heartMat = new THREE.MeshPhongMaterial({
+                color: COLORS.onyxheart,  // Orange #ff6b35
+                emissive: COLORS.onyxheart,
+                emissiveIntensity: 0.4,
                 transparent: true,
-                opacity: 0.8
+                opacity: 0.9
             });
-            const glow = new THREE.Mesh(glowGeo, glowMat);
-            mesh.add(glow);
+            const heart = new THREE.Mesh(heartGeo, heartMat);
+            heart.userData = { type: 'heart', baseColor: COLORS.onyxheart };
+            mesh.add(heart);
 
-            // Label avec icone
-            const icon = getDeviceIcon(machine);
-            createLabel(machine.hostname || machine.node_id, mesh, size * 0.8, icon);
+            // 5 particules orbitales pour les métriques (invisibles par défaut)
+            const metricParticles = {};
+            const orbitRadius = size * 0.8;  // Rayon de l'orbite
 
-            // Creer les spheres de metriques (cachees par defaut)
-            const metricSpheres = {};
-            const metricSize = size * 0.12;  // Petites spheres
-
-            for (const [metricName, color] of Object.entries(METRIC_COLORS)) {
-                const pos = METRIC_POSITIONS[metricName];
-                const sphereGeo = new THREE.SphereGeometry(metricSize, 16, 16);
-                const sphereMat = new THREE.MeshBasicMaterial({
-                    color: color,
+            for (const [metricName, config] of Object.entries(METRIC_CONFIG)) {
+                // Particule sphérique
+                const particleSize = size * 0.12;
+                const particleGeo = new THREE.SphereGeometry(particleSize, 16, 16);
+                const particleMat = new THREE.MeshPhongMaterial({
+                    color: config.color,
+                    emissive: config.color,
+                    emissiveIntensity: 0.5,
                     transparent: true,
                     opacity: 0.9
                 });
-                const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-                sphere.position.set(pos.x, pos.y, pos.z);
-                sphere.visible = false;  // Cache par defaut
-                sphere.userData = {
-                    type: 'metric',
+                const particle = new THREE.Mesh(particleGeo, particleMat);
+
+                // Position initiale sur l'orbite (décalée selon l'ordre)
+                const initialAngle = (config.order / 5) * Math.PI * 2;
+                particle.position.set(
+                    Math.cos(initialAngle) * orbitRadius,
+                    (config.order - 2) * size * 0.15,  // Légère variation en Y
+                    Math.sin(initialAngle) * orbitRadius
+                );
+
+                particle.userData = {
+                    type: 'metric-particle',
                     metric: metricName,
-                    baseScale: 1.0,
-                    pulsePhase: Math.random() * Math.PI * 2,  // Phase aleatoire pour desynchroniser
-                    value: 0  // Valeur de charge 0-100
+                    orbitRadius: orbitRadius,
+                    baseSize: particleSize,
+                    value: 0,
+                    angle: initialAngle,
+                    speed: 0.5,  // Vitesse de base
+                    order: config.order
                 };
-                mesh.add(sphere);
-                metricSpheres[metricName] = sphere;
+                particle.visible = false;
+                mesh.add(particle);
+                metricParticles[metricName] = particle;
             }
+            // Label avec icone
+            const icon = getDeviceIcon(machine);
+            createLabel(machine.hostname || machine.node_id, mesh, size * 0.8, icon);
 
             // Stocker avec infos pour updates
             meshes.machines[machine.node_id] = {
                 mesh,
                 wireframe,
-                glow,
+                heart,
+                metricParticles,
                 machine,
                 isSoma,
                 baseColor,
                 skillStatuses: {},
-                metricSpheres  // Ajouter les spheres de metriques
+                metrics: { cpu: 0, gpu: 0, ram: 0, disk: 0, net: 0 },
+                metricsVisible: false  // Flag pour savoir si les métriques sont affichées
             };
 
             // Calculer le status initial basé sur les skills
@@ -740,7 +765,8 @@
 
                 if (hasWorking) return 'working';
                 if (hasUp) return 'online';
-                return 'offline';
+                // OnyxSoma est toujours considéré comme allumé (c'est le serveur principal)
+                return 'idle';
             }
 
             // Pour les autres machines, checker leurs skills locaux
@@ -763,6 +789,9 @@
 
             if (hasWorking) return 'working';
             if (hasUp) return 'online';
+            // Si la machine a un heartbeat récent (status=online), elle est idle
+            // Sinon elle est vraiment offline
+            if (machine.status === 'online') return 'idle';
             return 'offline';
         }
 
@@ -775,35 +804,44 @@
             const baseColor = machineData.baseColor;
             const mat = machineData.mesh.material;
             const wireMat = machineData.wireframe ? machineData.wireframe.material : null;
-            const glowMat = machineData.glow ? machineData.glow.material : null;
+            const heart = machineData.heart;
+
+            // Le Heart reste toujours orange - ne change jamais de couleur
+            // Seule la machine change de couleur selon le status
 
             if (status === 'working') {
-                // Magenta pulsant
+                // Machine magenta pulsante
                 mat.color = new THREE.Color(0xff00ff);
                 mat.emissive = new THREE.Color(0xff00ff);
                 mat.emissiveIntensity = 0.4;
                 mat.opacity = 0.6;
                 if (wireMat) wireMat.color = new THREE.Color(0xff00ff);
-                if (glowMat) {
-                    glowMat.color = new THREE.Color(0xff00ff);
-                    glowMat.opacity = 1.0;
-                }
-                // Ajouter au pulsing
+                // Ajouter la machine au pulsing
                 if (!pulsingObjects.includes(machineData.mesh)) {
                     pulsingObjects.push(machineData.mesh);
                 }
             } else if (status === 'online') {
-                // Vert pour online/up
+                // Vert pour online/up (skill actif)
                 const onlineColor = COLORS.up; // 0x00ff88 - vert
                 mat.color = new THREE.Color(onlineColor);
                 mat.emissive = new THREE.Color(onlineColor);
                 mat.emissiveIntensity = 0.3;
                 mat.opacity = 0.5;
                 if (wireMat) wireMat.color = new THREE.Color(onlineColor);
-                if (glowMat) {
-                    glowMat.color = new THREE.Color(onlineColor);
-                    glowMat.opacity = 0.9;
+                // Retirer du pulsing
+                const idx = pulsingObjects.indexOf(machineData.mesh);
+                if (idx !== -1) {
+                    pulsingObjects.splice(idx, 1);
+                    machineData.mesh.scale.setScalar(1);
                 }
+            } else if (status === 'idle') {
+                // Bleu pastel pour machine allumée mais sans skill actif
+                const idleColor = COLORS.idle; // 0x6699cc - bleu pastel
+                mat.color = new THREE.Color(idleColor);
+                mat.emissive = new THREE.Color(idleColor);
+                mat.emissiveIntensity = 0.2;
+                mat.opacity = 0.4;
+                if (wireMat) wireMat.color = new THREE.Color(idleColor);
                 // Retirer du pulsing
                 const idx = pulsingObjects.indexOf(machineData.mesh);
                 if (idx !== -1) {
@@ -811,15 +849,18 @@
                     machineData.mesh.scale.setScalar(1);
                 }
             } else {
-                // Offline - grisé
+                // Offline - grisé (PC éteint)
                 mat.color = new THREE.Color(0x444444);
                 mat.emissive = new THREE.Color(0x222222);
                 mat.emissiveIntensity = 0.05;
                 mat.opacity = 0.25;
                 if (wireMat) wireMat.color = new THREE.Color(0x555555);
-                if (glowMat) {
-                    glowMat.color = new THREE.Color(0x333333);
-                    glowMat.opacity = 0.3;
+                // Heart devient aussi grisé quand offline
+                if (heart) {
+                    heart.material.color = new THREE.Color(0x444444);
+                    heart.material.emissive = new THREE.Color(0x222222);
+                    heart.material.emissiveIntensity = 0.1;
+                    heart.material.opacity = 0.4;
                 }
                 // Retirer du pulsing
                 const idx = pulsingObjects.indexOf(machineData.mesh);
@@ -827,6 +868,14 @@
                     pulsingObjects.splice(idx, 1);
                     machineData.mesh.scale.setScalar(1);
                 }
+            }
+
+            // Restaurer la couleur du Heart si pas offline
+            if (status !== 'offline' && heart) {
+                heart.material.color = new THREE.Color(COLORS.onyxheart);
+                heart.material.emissive = new THREE.Color(COLORS.onyxheart);
+                heart.material.emissiveIntensity = 0.4;
+                heart.material.opacity = 0.9;
             }
 
             console.log(`Machine ${nodeId}: status=${status}`);
@@ -1054,31 +1103,51 @@
 
         // Determine actual skill status from various fields
         function getSkillStatus(skill) {
+            const skillName = skill.name || skill.skill_name || '?';
+
+            // Debug hbi-plate
+            if (skillName === 'hbi-plate') {
+                console.log('[DEBUG] hbi-plate INPUT:', JSON.stringify(skill, null, 2));
+            }
+
             // Check live_status first (from realtime updates via Brain3D)
-            if (skill.live_status) return skill.live_status;
+            if (skill.live_status) {
+                if (skillName === 'hbi-plate') console.log('[DEBUG] hbi-plate: returning live_status =', skill.live_status);
+                return skill.live_status;
+            }
 
             // Check runtime_status object (from OnyxCore API)
-            if (skill.runtime_status) {
-                if (skill.runtime_status.online === true) return 'running';
-                if (skill.runtime_status.online === false) return 'off';
+            if (skill.runtime_status && skill.runtime_status.online !== undefined) {
+                if (skillName === 'hbi-plate') console.log('[DEBUG] hbi-plate: runtime_status.online =', skill.runtime_status.online, typeof skill.runtime_status.online);
+                // Handle both boolean and truthy values
+                if (skill.runtime_status.online === true || skill.runtime_status.online === 1) return 'running';
+                if (skill.runtime_status.online === false || skill.runtime_status.online === 0) return 'off';
             }
 
             // Check online field (1/0) from OnyxCore
+            if (skillName === 'hbi-plate') console.log('[DEBUG] hbi-plate: online =', skill.online, typeof skill.online);
             if (skill.online === 1 || skill.online === true) return 'running';
             if (skill.online === 0 || skill.online === false) return 'off';
 
-            // Check status field
-            if (skill.status === 'prod' || skill.status === 'dev') {
-                // Status is deployment status, not runtime
+            // Check status field for deployment status
+            if (skill.status === 'prod' || skill.status === 'dev' || skill.status === 'active') {
+                // Status is deployment status, not runtime - consider off unless proven otherwise
                 return 'off';
             }
 
-            // OnyxHeart reports "running" for registered skills even if not active
-            // Without online field, we can't know if it's really running
-            // Consider it "idle" (grey) until we get a live_status update
-            if (skill.status === 'running' && (skill.online === undefined || skill.online === null)) {
-                return 'idle';
+            // OnyxHeart skills report status directly ('running', 'error', 'stopped')
+            // But this data may be stale if skill crashed without reporting
+            // Trust OnyxHeart data only if no contradicting OnyxCore data exists
+            if (skill.online === undefined && skill.runtime_status === undefined) {
+                // Pure OnyxHeart data - trust it (skill is responsible for reporting)
+                if (skill.status === 'running') return 'running';
+                if (skill.status === 'error') return 'failed';
+                if (skill.status === 'stopped' || skill.status === 'off') return 'off';
             }
+
+            if (skill.status === 'running') return 'running';
+            if (skill.status === 'error') return 'failed';
+            if (skill.status === 'stopped' || skill.status === 'off') return 'off';
 
             return skill.status || 'unknown';
         }
@@ -1301,11 +1370,20 @@
             handleInteraction(touch.clientX, touch.clientY);
         }
 
+        // Gestion du double-clic
+        let lastClickTime = 0;
+        let lastClickedNodeId = null;
+        const DOUBLE_CLICK_DELAY = 300; // ms
+
         function onClick(event) {
-            handleInteraction(event.clientX, event.clientY);
+            handleInteraction(event.clientX, event.clientY, false);
         }
 
-        function handleInteraction(clientX, clientY) {
+        function onDoubleClick(event) {
+            handleInteraction(event.clientX, event.clientY, true);
+        }
+
+        function handleInteraction(clientX, clientY, isDoubleClick = false) {
             const mouse = new THREE.Vector2(
                 (clientX / window.innerWidth) * 2 - 1,
                 -(clientY / window.innerHeight) * 2 + 1
@@ -1320,21 +1398,50 @@
                 const obj = intersect.object;
                 const userData = obj.userData;
 
-                if (userData.type === 'machine') {
-                    // Enter machine view (only for OnyxHeart machines)
-                    if (userData.data.has_onyxheart !== false) {
-                        currentMachine = userData.data;
-                        currentView = 'machine';
-                        viewStack.push('machine:' + userData.data.node_id);
+                if (userData.type === 'machine' || userData.type === 'metric-particle' || userData.type === 'heart') {
+                    // Trouver la machine parente
+                    let machineData = userData.data;
+                    let nodeId = machineData?.node_id;
 
-                        // Animate camera
-                        animateCameraTo(obj.position.clone(), () => {
-                            buildCurrentView();
-                            resetCamera();
-                        });
+                    // Si on a cliqué sur une particule ou le heart, remonter au parent
+                    if (!machineData && obj.parent) {
+                        const parentUserData = obj.parent.userData;
+                        if (parentUserData.type === 'machine') {
+                            machineData = parentUserData.data;
+                            nodeId = machineData?.node_id;
+                        }
+                    }
+
+                    if (!machineData) continue;
+
+                    const now = Date.now();
+                    const isQuickSecondClick = (now - lastClickTime < DOUBLE_CLICK_DELAY) && (lastClickedNodeId === nodeId);
+
+                    if (isDoubleClick || isQuickSecondClick) {
+                        // DOUBLE-CLIC : Entrer dans la machine (seulement OnyxHeart)
+                        if (machineData.has_onyxheart !== false) {
+                            currentMachine = machineData;
+                            currentView = 'machine';
+                            viewStack.push('machine:' + nodeId);
+                            hideAllMetrics();  // Cacher les métriques en entrant
+
+                            animateCameraTo(obj.position.clone(), () => {
+                                buildCurrentView();
+                                resetCamera();
+                            });
+                        }
+                        lastClickTime = 0;
+                        lastClickedNodeId = null;
                     } else {
-                        // Show detail for non-OnyxHeart machines
-                        showDetail(userData.data, 'machine');
+                        // SIMPLE CLIC : Afficher détails + métriques
+                        lastClickTime = now;
+                        lastClickedNodeId = nodeId;
+
+                        // Afficher les infos dans le panneau
+                        showDetailWithMetrics(machineData);
+
+                        // Afficher les particules orbitales
+                        showMetricsForMachine(nodeId);
                     }
                     return;
                 }
@@ -1401,7 +1508,12 @@
             }
         }
 
-        function showDetail(item, type) {
+        // Affiche les détails d'une machine avec ses métriques (appelé au simple clic)
+        function showDetailWithMetrics(machine) {
+            showDetail(machine, 'machine', true);
+        }
+
+        function showDetail(item, type, forceMetrics = false) {
             const panel = document.getElementById('detail-panel');
             const title = document.getElementById('detail-title');
             const content = document.getElementById('detail-content');
@@ -1411,7 +1523,25 @@
             if (type === 'machine' || type === 'onyxcore' || type === 'onyxheart') {
                 const m = item;
                 const isCore = type === 'onyxcore' || m.hostname === 'OnyxSoma';
-                title.textContent = (isCore ? '🧠 ' : '💻 ') + (m.hostname || m.node_id);
+                title.textContent = (isCore ? '🧠 ' : '🧡 ') + (m.hostname || m.node_id);
+
+                // Recuperer les metriques
+                const machineData = meshes.machines[m.node_id];
+                const metrics = machineData?.metrics || { cpu: 0, ram: 0, disk: 0, gpu: 0, net: 0 };
+
+                // Afficher les métriques si forceMetrics ou monitoringEnabled
+                let metricsHtml = '';
+                if (forceMetrics || monitoringEnabled || machineData?.metricsVisible) {
+                    metricsHtml = `
+                    <h4 style="margin-top:15px;color:#ff6b35;border-top:1px solid #333;padding-top:10px;">📊 Métriques temps réel</h4>
+                    <div class="stat-row"><span class="stat-label" style="color:${METRIC_COLORS_HEX.cpu}">● CPU</span><span class="stat-value">${metrics.cpu.toFixed(0)}%</span></div>
+                    <div class="stat-row"><span class="stat-label" style="color:${METRIC_COLORS_HEX.gpu}">● GPU</span><span class="stat-value">${metrics.gpu.toFixed(0)}%</span></div>
+                    <div class="stat-row"><span class="stat-label" style="color:${METRIC_COLORS_HEX.ram}">● RAM</span><span class="stat-value">${metrics.ram.toFixed(0)}%</span></div>
+                    <div class="stat-row"><span class="stat-label" style="color:${METRIC_COLORS_HEX.disk}">● DISK</span><span class="stat-value">${metrics.disk.toFixed(0)}%</span></div>
+                    <div class="stat-row"><span class="stat-label" style="color:${METRIC_COLORS_HEX.net}">● NET</span><span class="stat-value">${metrics.net.toFixed(0)}%</span></div>
+                    <p style="font-size:0.75em;color:#666;margin-top:5px;">Double-clic pour voir les skills</p>
+                    `;
+                }
 
                 html = `
                     <div class="stat-row"><span class="stat-label">Type</span><span class="stat-value">${isCore ? 'OnyxCore' : 'OnyxHeart'}</span></div>
@@ -1419,6 +1549,7 @@
                     <div class="stat-row"><span class="stat-label">IP</span><span class="stat-value">${m.local_ip || 'N/A'}:${m.api_port || 8900}</span></div>
                     <div class="stat-row"><span class="stat-label">Platform</span><span class="stat-value">${m.platform || '?'}/${m.architecture || '?'}</span></div>
                     <div class="stat-row"><span class="stat-label">Hardware</span><span class="stat-value">${m.cpu_count || '?'} CPU / ${m.ram_mb ? Math.round(m.ram_mb/1024) : '?'} GB</span></div>
+                    ${metricsHtml}
                     <h4 style="margin-top:15px;color:#00d4aa;border-top:1px solid #333;padding-top:10px;">Skills (${(m.skills||[]).length})</h4>
                     <div class="skill-list">
                         ${(m.skills || []).length === 0 ? '<p style="color:#666">No skills registered</p>' :
@@ -1727,11 +1858,13 @@
             }
 
             // Pour les skills sur OnyxSoma (pas de host), mettre à jour OnyxSoma
-            if (!update.host && areaToUpdate) {
-                // Trouver OnyxSoma
+            if (!update.host) {
+                // Trouver OnyxSoma et mettre à jour son cache de skills
                 for (const nodeId in meshes.machines) {
                     if (meshes.machines[nodeId].isSoma) {
+                        meshes.machines[nodeId].skillStatuses[skillName] = update.status;
                         machineToUpdate = nodeId;
+                        console.log(`[OnyxSoma] Updated ${skillName} to ${update.status}, aggregated:`, getAggregatedMachineStatus(nodeId));
                         break;
                     }
                 }
@@ -1740,6 +1873,7 @@
             // Update machine appearance
             if (machineToUpdate) {
                 updateMachineAppearance(machineToUpdate);
+                console.log(`[Machine] ${machineToUpdate} appearance updated, final status:`, getAggregatedMachineStatus(machineToUpdate));
             }
         }
 
@@ -1764,7 +1898,7 @@
             document.getElementById('btn-rotate').classList.toggle('active', autoRotate);
         }
 
-        // ========== MONITORING SYSTEM ==========
+        // ========== MONITORING SYSTEM - 5 Spheres Pulsantes ==========
         function toggleMonitoring() {
             monitoringEnabled = !monitoringEnabled;
             document.getElementById('btn-monitoring').classList.toggle('active', monitoringEnabled);
@@ -1776,40 +1910,75 @@
             }
 
             if (monitoringEnabled) {
-                // Afficher toutes les spheres de metriques
-                showAllMetricSpheres();
+                // Afficher les spheres de metriques
+                showMetricSpheres();
                 // Demarrer le polling des metriques
                 startMonitoringPolling();
-                console.log('[Brain3D] Monitoring enabled');
+                console.log('[Brain3D] Monitoring enabled - Pulsing spheres active');
             } else {
-                // Cacher toutes les spheres de metriques
-                hideAllMetricSpheres();
+                // Cacher les spheres de metriques
+                hideMetricSpheres();
                 // Arreter le polling
                 stopMonitoringPolling();
                 console.log('[Brain3D] Monitoring disabled');
             }
         }
 
-        function showAllMetricSpheres() {
-            for (const nodeId in meshes.machines) {
-                const machineData = meshes.machines[nodeId];
-                if (machineData.metricSpheres) {
-                    for (const metricName in machineData.metricSpheres) {
-                        machineData.metricSpheres[metricName].visible = true;
-                    }
-                }
+        // Variable pour tracker la machine sélectionnée (métriques affichées)
+        let selectedMachineNodeId = null;
+
+        function showMetricsForMachine(nodeId) {
+            // Cacher les métriques de l'ancienne machine
+            if (selectedMachineNodeId && selectedMachineNodeId !== nodeId) {
+                hideMetricsForMachine(selectedMachineNodeId);
+            }
+
+            selectedMachineNodeId = nodeId;
+            const machineData = meshes.machines[nodeId];
+            if (!machineData || !machineData.metricParticles) return;
+
+            machineData.metricsVisible = true;
+            for (const metricName in machineData.metricParticles) {
+                machineData.metricParticles[metricName].visible = true;
+            }
+
+            // Démarrer le polling si pas déjà actif
+            if (!monitoringInterval) {
+                startMonitoringPolling();
+            }
+
+            console.log(`[Brain3D] Showing metrics for ${nodeId}`);
+        }
+
+        function hideMetricsForMachine(nodeId) {
+            const machineData = meshes.machines[nodeId];
+            if (!machineData || !machineData.metricParticles) return;
+
+            machineData.metricsVisible = false;
+            for (const metricName in machineData.metricParticles) {
+                const particle = machineData.metricParticles[metricName];
+                particle.visible = false;
+                particle.scale.setScalar(1);  // Reset scale
             }
         }
 
-        function hideAllMetricSpheres() {
+        function hideAllMetrics() {
             for (const nodeId in meshes.machines) {
-                const machineData = meshes.machines[nodeId];
-                if (machineData.metricSpheres) {
-                    for (const metricName in machineData.metricSpheres) {
-                        machineData.metricSpheres[metricName].visible = false;
-                    }
-                }
+                hideMetricsForMachine(nodeId);
             }
+            selectedMachineNodeId = null;
+            stopMonitoringPolling();
+        }
+
+        // Anciennes fonctions pour compatibilité (bouton toggle global)
+        function showMetricSpheres() {
+            for (const nodeId in meshes.machines) {
+                showMetricsForMachine(nodeId);
+            }
+        }
+
+        function hideMetricSpheres() {
+            hideAllMetrics();
         }
 
         function startMonitoringPolling() {
@@ -1849,49 +2018,76 @@
 
         function updateMachineMetrics(nodeId, metrics) {
             const machineData = meshes.machines[nodeId];
-            if (!machineData || !machineData.metricSpheres) return;
+            if (!machineData) return;
 
-            for (const metricName in metrics) {
-                const sphere = machineData.metricSpheres[metricName];
-                if (sphere) {
-                    // Valeur de 0 a 100
-                    const value = Math.min(100, Math.max(0, metrics[metricName] || 0));
-                    sphere.userData.value = value;
+            // Stocker les metriques (5 parametres)
+            machineData.metrics = {
+                cpu: Math.min(100, Math.max(0, metrics.cpu || 0)),
+                gpu: Math.min(100, Math.max(0, metrics.gpu || 0)),
+                ram: Math.min(100, Math.max(0, metrics.ram || 0)),
+                disk: Math.min(100, Math.max(0, metrics.disk || 0)),
+                net: Math.min(100, Math.max(0, metrics.net || 0))
+            };
 
-                    // Ajuster l'opacite selon la charge (plus charge = plus visible)
-                    const minOpacity = 0.3;
-                    const maxOpacity = 1.0;
-                    sphere.material.opacity = minOpacity + (value / 100) * (maxOpacity - minOpacity);
+            // Mettre a jour les valeurs dans les particules
+            if (machineData.metricParticles) {
+                for (const metricName in machineData.metrics) {
+                    const particle = machineData.metricParticles[metricName];
+                    if (particle) {
+                        particle.userData.value = machineData.metrics[metricName];
+                    }
                 }
             }
         }
 
-        // Animation des spheres de metriques (pulsation selon charge)
-        function animateMetricSpheres() {
-            if (!monitoringEnabled) return;
-
+        // Animation fluide des particules orbitales
+        function animateMetricParticles() {
             for (const nodeId in meshes.machines) {
                 const machineData = meshes.machines[nodeId];
-                if (!machineData || !machineData.metricSpheres) continue;
+                if (!machineData || !machineData.metricParticles || !machineData.metricsVisible) continue;
 
-                for (const metricName in machineData.metricSpheres) {
-                    const sphere = machineData.metricSpheres[metricName];
-                    if (!sphere.visible) continue;
+                for (const metricName in machineData.metricParticles) {
+                    const particle = machineData.metricParticles[metricName];
+                    if (!particle.visible) continue;
 
-                    const value = sphere.userData.value || 0;
-                    const phase = sphere.userData.pulsePhase || 0;
+                    const value = particle.userData.value || 0;
+                    const order = particle.userData.order || 0;
+                    const orbitRadius = particle.userData.orbitRadius;
+                    const baseSize = particle.userData.baseSize;
 
-                    // Frequence de pulsation proportionnelle a la charge
-                    // Charge 0% = pas de pulsation, Charge 100% = pulsation rapide
-                    const pulseSpeed = 1 + (value / 100) * 4;  // 1 a 5 Hz
-                    const pulseAmplitude = 0.1 + (value / 100) * 0.4;  // 10% a 50% d'amplitude
+                    // Vitesse orbitale proportionnelle à la charge (plus de charge = plus rapide)
+                    const baseSpeed = 0.3 + (value / 100) * 1.5;  // 0.3 à 1.8 rad/s
+                    particle.userData.angle += baseSpeed * 0.016;
 
-                    // Calculer le facteur de pulsation
-                    const pulse = 1 + Math.sin(animationTime * pulseSpeed + phase) * pulseAmplitude;
+                    // Position sur l'orbite
+                    const angle = particle.userData.angle;
+                    const yOffset = (order - 2) * (machineData.isSoma ? 2 : 1.2);  // Décalage en Y
+                    particle.position.set(
+                        Math.cos(angle) * orbitRadius,
+                        yOffset + Math.sin(angle * 2) * 0.5,  // Légère oscillation en Y
+                        Math.sin(angle) * orbitRadius
+                    );
 
-                    sphere.scale.setScalar(pulse);
+                    // Taille proportionnelle à la charge (plus de charge = plus gros)
+                    const sizeMultiplier = 0.5 + (value / 100) * 1.5;  // 0.5x à 2x
+                    particle.scale.setScalar(sizeMultiplier);
+
+                    // Pulsation subtile
+                    const pulseSpeed = 2 + (value / 100) * 3;
+                    const pulseAmplitude = 0.1 + (value / 100) * 0.15;
+                    const pulse = 1 + Math.sin(animationTime * pulseSpeed + order) * pulseAmplitude;
+                    particle.scale.multiplyScalar(pulse);
+
+                    // Opacité et émission selon charge
+                    particle.material.opacity = 0.6 + (value / 100) * 0.35;
+                    particle.material.emissiveIntensity = 0.3 + (value / 100) * 0.5;
                 }
             }
+        }
+
+        // Alias pour compatibilité
+        function animateMetricSpheres() {
+            animateMetricParticles();
         }
 
         function onResize() {
