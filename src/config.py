@@ -121,10 +121,59 @@ KNOWN_MACHINES = [
         "hostname": "OnyxLab",
         "ip": "192.168.122.66",
         "machine_type": MachineType.FORGE,
-        "status": Status.UP,  # Brain3D tourne dessus
+        "status": Status.UP,
         "has_heart": True,
         "platform": "linux",
         "role": "Development VM",
+    },
+]
+
+# Devices réseau sans Heart (routeurs, switches, NAS, etc.)
+NETWORK_DEVICES = [
+    {
+        "node_id": "router-main",
+        "hostname": "Livebox",
+        "ip": "10.0.0.1",
+        "machine_type": MachineType.NETWORK,
+        "status": Status.UP,
+        "has_heart": False,
+        "role": "Router principal",
+    },
+    {
+        "node_id": "switch-core",
+        "hostname": "Switch-Core",
+        "ip": "10.0.0.2",
+        "machine_type": MachineType.NETWORK,
+        "status": Status.UP,
+        "has_heart": False,
+        "role": "Switch principal",
+    },
+    {
+        "node_id": "nas-synology",
+        "hostname": "NAS-Synology",
+        "ip": "10.0.0.50",
+        "machine_type": MachineType.NETWORK,
+        "status": Status.UP,
+        "has_heart": False,
+        "role": "Stockage NAS",
+    },
+    {
+        "node_id": "ap-wifi",
+        "hostname": "AP-Wifi",
+        "ip": "10.0.0.10",
+        "machine_type": MachineType.NETWORK,
+        "status": Status.UP,
+        "has_heart": False,
+        "role": "Point d'accès WiFi",
+    },
+    {
+        "node_id": "printer",
+        "hostname": "Imprimante",
+        "ip": "10.0.0.100",
+        "machine_type": MachineType.NETWORK,
+        "status": Status.UP,
+        "has_heart": False,
+        "role": "Imprimante réseau",
     },
 ]
 

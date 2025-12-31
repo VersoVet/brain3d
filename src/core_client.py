@@ -6,7 +6,7 @@ from datetime import datetime
 
 import httpx
 
-from .config import CORE_URL, SPECIAL_NODES, KNOWN_MACHINES, IP_TO_HOSTNAME, MachineType, Status
+from .config import CORE_URL, SPECIAL_NODES, KNOWN_MACHINES, NETWORK_DEVICES, IP_TO_HOSTNAME, MachineType, Status
 from .models import Machine, Skill, Area, Metrics
 
 logger = logging.getLogger(__name__)
@@ -122,6 +122,27 @@ class CoreAPIClient:
             )
             machines_list.append(machine)
             logger.debug(f"Added known machine: {known['hostname']}")
+
+        # Ajouter les devices réseau sans Heart
+        existing_ids = {m.node_id for m in machines_list}
+        existing_ips = {m.ip for m in machines_list}
+
+        for device in NETWORK_DEVICES:
+            if device["node_id"] in existing_ids or device["ip"] in existing_ips:
+                continue
+
+            machine = Machine(
+                node_id=device["node_id"],
+                hostname=device["hostname"],
+                ip=device["ip"],
+                machine_type=MachineType.NETWORK,
+                status=device.get("status", Status.UNKNOWN),
+                has_heart=False,
+                platform="network",
+                role=device.get("role", ""),
+            )
+            machines_list.append(machine)
+            logger.debug(f"Added network device: {device['hostname']}")
 
         return machines_list
 
