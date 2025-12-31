@@ -155,7 +155,13 @@ class Brain3DApp {
     }
 
     _startPhysicsLoop() {
+        let lastTime = performance.now();
+
         const update = () => {
+            const now = performance.now();
+            const deltaTime = (now - lastTime) / 1000; // Convert to seconds
+            lastTime = now;
+
             // Update physics
             physics.update();
 
@@ -164,6 +170,9 @@ class Brain3DApp {
 
             // Update connection lines
             connectionRenderer.updateAllConnections();
+
+            // Update message particles
+            connectionRenderer.updateParticles(deltaTime);
 
             requestAnimationFrame(update);
         };

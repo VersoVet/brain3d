@@ -64,6 +64,70 @@ const CONFIG = {
         rotationSpeed: 0.001,
     },
 
+    // Message Bus - Types et couleurs
+    MESSAGE_TYPES: {
+        heartbeat: {
+            color: 0x00ff88,      // Vert - Heart → Core
+            name: 'Heartbeat',
+            speed: 1.5,
+            size: 0.3,
+        },
+        ping: {
+            color: 0x00ffff,      // Cyan - Test connectivité
+            name: 'Ping',
+            speed: 3.0,
+            size: 0.25,
+        },
+        pong: {
+            color: 0x00cccc,      // Cyan foncé - Réponse
+            name: 'Pong',
+            speed: 3.0,
+            size: 0.25,
+        },
+        sync: {
+            color: 0xffff00,      // Jaune - Synchronisation
+            name: 'Sync',
+            speed: 2.0,
+            size: 0.4,
+        },
+        command: {
+            color: 0x4488ff,      // Bleu - Commandes
+            name: 'Command',
+            speed: 2.5,
+            size: 0.35,
+        },
+        broadcast: {
+            color: 0xffffff,      // Blanc - Broadcast
+            name: 'Broadcast',
+            speed: 2.0,
+            size: 0.5,
+        },
+        forge: {
+            color: 0xaa44ff,      // Violet - Forge
+            name: 'Forge',
+            speed: 2.0,
+            size: 0.4,
+        },
+        status: {
+            color: 0x00d4aa,      // Teal - Status
+            name: 'Status',
+            speed: 2.0,
+            size: 0.3,
+        },
+        error: {
+            color: 0xff4400,      // Orange/Rouge - Erreurs
+            name: 'Error',
+            speed: 3.5,
+            size: 0.5,
+        },
+        skill_event: {
+            color: 0xff00ff,      // Magenta - Events skills
+            name: 'Skill Event',
+            speed: 2.5,
+            size: 0.35,
+        },
+    },
+
     // WebSocket
     WS: {
         reconnectDelay: 3000,
