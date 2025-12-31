@@ -14,8 +14,11 @@ class NavigationManager {
         // Touch state for double-tap detection
         this.lastTapTime = 0;
         this.lastTapPosition = { x: 0, y: 0 };
-        this.doubleTapDelay = 300; // ms
-        this.doubleTapDistance = 30; // px
+        this.doubleTapDelay = 350; // ms
+        this.doubleTapDistance = 40; // px
+        this.touchStartTime = 0;
+        this.touchStartPosition = { x: 0, y: 0 };
+        this.doubleTapFired = false;
 
         this._setupEvents();
     }
@@ -110,48 +113,79 @@ class NavigationManager {
     _onTouchStart(event) {
         if (event.touches.length === 1) {
             const touch = event.touches[0];
-            const now = Date.now();
-            const timeDiff = now - this.lastTapTime;
-            const dx = touch.clientX - this.lastTapPosition.x;
-            const dy = touch.clientY - this.lastTapPosition.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            // Check for double-tap (drill-down)
-            if (timeDiff < this.doubleTapDelay && distance < this.doubleTapDistance) {
-                event.preventDefault();
-                this._onDoubleTap({ clientX: touch.clientX, clientY: touch.clientY });
-                this.lastTapTime = 0; // Reset
-                return;
-            }
-
-            this.lastTapTime = now;
-            this.lastTapPosition = { x: touch.clientX, y: touch.clientY };
-
-            // Start potential drag
-            this._onMouseDown({ clientX: touch.clientX, clientY: touch.clientY });
+            this.touchStartTime = Date.now();
+            this.touchStartPosition = { x: touch.clientX, y: touch.clientY };
+            this.doubleTapFired = false;
         }
     }
 
     _onTouchMove(event) {
-        if (event.touches.length === 1 && this.isDragging) {
-            event.preventDefault();
+        if (event.touches.length === 1) {
             const touch = event.touches[0];
-            this._onMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
+            const dx = touch.clientX - this.touchStartPosition.x;
+            const dy = touch.clientY - this.touchStartPosition.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // If moved significantly, it's a drag not a tap
+            if (distance > 10 && !this.isDragging) {
+                this._onMouseDown({ clientX: this.touchStartPosition.x, clientY: this.touchStartPosition.y });
+            }
+
+            if (this.isDragging) {
+                event.preventDefault();
+                this._onMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
+            }
         }
     }
 
     _onTouchEnd(event) {
-        if (!this.isDragging && event.changedTouches.length === 1) {
-            // Single tap - select machine
+        if (event.changedTouches.length === 1) {
             const touch = event.changedTouches[0];
-            this._onClick({ clientX: touch.clientX, clientY: touch.clientY });
+            const now = Date.now();
+            const tapDuration = now - this.touchStartTime;
+            const dx = touch.clientX - this.touchStartPosition.x;
+            const dy = touch.clientY - this.touchStartPosition.y;
+            const moveDistance = Math.sqrt(dx * dx + dy * dy);
+
+            // Only process as tap if it was quick and didn't move much
+            if (tapDuration < 300 && moveDistance < 15) {
+                // Check for double-tap
+                const timeSinceLastTap = now - this.lastTapTime;
+                const dxLast = touch.clientX - this.lastTapPosition.x;
+                const dyLast = touch.clientY - this.lastTapPosition.y;
+                const distanceFromLastTap = Math.sqrt(dxLast * dxLast + dyLast * dyLast);
+
+                if (timeSinceLastTap < this.doubleTapDelay && distanceFromLastTap < this.doubleTapDistance) {
+                    // Double tap detected!
+                    event.preventDefault();
+                    this.doubleTapFired = true;
+                    this._onDoubleTap({ clientX: touch.clientX, clientY: touch.clientY });
+                    this.lastTapTime = 0;
+                    this.lastTapPosition = { x: 0, y: 0 };
+                } else {
+                    // Single tap - record for potential double-tap
+                    this.lastTapTime = now;
+                    this.lastTapPosition = { x: touch.clientX, y: touch.clientY };
+
+                    // Delay single tap action to allow for double-tap
+                    setTimeout(() => {
+                        if (!this.doubleTapFired && this.lastTapTime === now) {
+                            this._onClick({ clientX: touch.clientX, clientY: touch.clientY });
+                        }
+                    }, this.doubleTapDelay);
+                }
+            }
         }
+
         this._onMouseUp(event);
     }
 
     _onDoubleTap(event) {
+        console.log('Double tap detected!');
         const obj = this.scene.getIntersectedObject(event);
+        console.log('Intersected object:', obj);
         if (obj && obj.userData?.nodeId) {
+            console.log('Drilling down to:', obj.userData.nodeId);
             this.drillDown(obj.userData.nodeId);
         }
     }
