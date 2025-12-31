@@ -23,6 +23,7 @@ class AnimationManager {
 
         this.time += 0.016; // ~60fps
 
+        // Animate status-based animations (pulse, blink)
         this.animations.forEach((anim, nodeId) => {
             const mesh = machineRenderer?.getMesh(nodeId);
             if (!mesh) return;
@@ -39,6 +40,9 @@ class AnimationManager {
                     break;
             }
         });
+
+        // Animate special meshes (Core satellites, Forge particles)
+        machineRenderer?.animateSpecial(this.time);
 
         requestAnimationFrame(() => this._animate());
     }
