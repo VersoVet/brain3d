@@ -1,200 +1,156 @@
-# TODO - Brain3D & Architecture Onyx
+# TODO - Brain3D v3.0.0
 
-## Terminé
+## Termine
 
-### 18 dec 2025
-- [x] État des lieux OnyxHeart v1
-- [x] Création OnyxHeart v2 simplifié (~500 lignes vs ~3000)
-  - Suppression modules peers et vpn
-  - Nouveau endpoint `POST /skills/status`
-  - Envoi vers OnyxCore (plus Brain3D direct)
-- [x] Création onyx-sdk v2 Python
-  - Envoi vers OnyxHeart local (localhost:8900)
-  - API simple : `onyx.up()`, `onyx.working()`, `onyx.error()`
-  - Context manager : `with onyx.task("..."):`
+### 31 dec 2025 - Refonte v3.0.0
+- [x] Nouvelle architecture modulaire (src/ + static/js/)
+- [x] Backend FastAPI avec modules separes
+  - [x] main.py - Routes REST + WebSocket
+  - [x] config.py - Configuration centralisee
+  - [x] models.py - Modeles Pydantic
+  - [x] redis_client.py - Subscriber Redis
+  - [x] core_client.py - Client HTTP vers Core
+  - [x] websocket_manager.py - Gestion WS
+  - [x] state_manager.py - Cache + heritage statuts
+- [x] Frontend modulaire Three.js
+  - [x] scene.js - Setup Three.js
+  - [x] physics.js - Layout force-directed
+  - [x] machines.js - Rendu machines (Cube/Sphere/Dodeca/Icosa)
+  - [x] connections.js - Lignes elastiques
+  - [x] animations.js - Pulse/blink par statut
+  - [x] navigation.js - Selection, focus
+  - [x] ui.js - Panel infos
+  - [x] websocket.js - Client WS
+- [x] Correction endpoints Core (utiliser /nodes/health au lieu de /api/machines)
+- [x] Correction serialisation datetime (model_dump mode='json')
+- [x] Installation websockets/wsproto pour WebSocket
+- [x] Configuration iptables Dendrite pour acces distant
+- [x] Mise a jour documentation ARCHITECTURE.md
 
-### 17 dec 2025
-- [x] Couleurs des aires uniformisées (cyan #00d4aa)
-- [x] Gestion skills "off -> working" (skills sans mesh)
-- [x] Monitoring avec Torus (5 anneaux par machine : CPU, GPU, RAM, DISK, NET)
-
----
-
-## Architecture Cible
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         FLUX DE DONNÉES                                     │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  FLUX 1: STATUS (event-driven, temps réel)                                  │
-│  ─────────────────────────────────────────                                  │
-│                                                                             │
-│   Skill ──► OnyxHeart local ──► OnyxCore ──► Brain3D                       │
-│        (onyx-sdk)     (:8900)      (:8000)    (WebSocket)                   │
-│                                                                             │
-│   • Skill utilise onyx-sdk pour envoyer son status                         │
-│   • OnyxHeart reçoit via POST /skills/status                               │
-│   • OnyxHeart forward à OnyxCore                                           │
-│   • OnyxCore broadcast WebSocket aux subscribers                           │
-│                                                                             │
-│  FLUX 2: REFRESH (on-demand)                                                │
-│  ───────────────────────────                                                │
-│                                                                             │
-│   Brain3D ──[bouton]──► OnyxCore ──► OnyxHeart(s) ──► poll skills          │
-│                                                                             │
-│   • Utilisateur clique "Refresh"                                            │
-│   • OnyxCore interroge chaque OnyxHeart                                     │
-│   • OnyxHeart fait /health sur chaque skill local                          │
-│   • Résultat remonte et broadcast à Brain3D                                 │
-│                                                                             │
-│  FLUX 3: MÉTRIQUES (polling 1s, optionnel)                                  │
-│  ─────────────────────────────────────────                                  │
-│                                                                             │
-│   OnyxHeart ──► OnyxCore ──► Brain3D                                       │
-│            (heartbeat avec metrics)                                         │
-│                                                                             │
-│   • Métriques: CPU, GPU, RAM, DISK, NET (5 total)                          │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Composants
-
-| Composant | Version | Chemin | Rôle |
-|-----------|---------|--------|------|
-| **OnyxHeart v2** | 2.0.0 | `/apps/onyx-heart-v2/` | Agent local par machine |
-| **onyx-sdk** | 2.0.0 | `/apps/onyx-sdk/` | Librairie Python pour skills |
-| **OnyxCore** | - | `/apps/onyx/skills/onyx-api-master/` | Cerveau central |
-| **Brain3D** | - | `/apps/onyx-dev/skills/brain3d/` | Visualisation 3D |
+### Sessions precedentes
+- [x] Couleurs des aires uniformisees (cyan #00d4aa)
+- [x] Gestion skills "off -> working"
+- [x] OnyxHeart v2 deploye sur OnyxSoma
+- [x] onyx-sdk v2.0 cree
 
 ---
 
-## À Faire
+## En Cours
 
-### Haute Priorité
-
-#### Déploiement OnyxHeart v2
-- [x] Remplacer OnyxHeart v1 par v2 sur OnyxSoma
-- [x] Déployer OnyxHeart v2 sur VERSO-ACQUI (Windows service via NSSM)
-- [ ] Déployer OnyxHeart v2 sur les autres machines
-- [ ] Tester la chaîne complète Skill → OnyxHeart → OnyxCore → Brain3D
-
-#### Migration des skills vers BrainClient SDK
-- [x] Modifier SDK `/apps/onyx/sdk/brain_client.py` pour envoyer vers OnyxHeart local (localhost:8900)
-- [x] Modifier Brain3D prod pour utiliser OnyxHeart
-- [ ] **Identifier et migrer TOUS les skills actifs vers BrainClient SDK**
-  - Skills a migrer : project-manager, network-inventory, dev-orchestrator, skill-validator, etc.
-  - Chaque skill doit utiliser `BrainClient` ou `AsyncBrainClient` du SDK
-- [ ] Tester chaque skill migré
-
-#### skill-init (template)
-- [ ] Mettre à jour le template `skill.py` pour inclure BrainClient SDK par defaut
-- [ ] Mettre à jour le template `CLAUDE.md` avec documentation SDK
-- [ ] Ajouter import `from onyx.sdk.brain_client import BrainClient` dans le template
-
-#### skill-validator
-- [ ] Ajouter verification que le skill importe BrainClient
-- [ ] Ajouter verification que le skill appelle notify (status_up, status_working, etc.)
-- [ ] Verifier que le skill envoie bien vers localhost:8900 (pas directement vers OnyxCore)
-
-#### OnyxHeart v2
-- [ ] **Ajouter scan du repertoire skills pour decouvrir les nouveaux skills**
-  - Lire les manifest.json dans le repertoire skills
-  - Faire health check sur les ports declares
-  - Enregistrer les skills dans le store
-- [ ] Ajouter endpoint `GET /skills/discover` pour forcer la decouverte
-- [x] Vérifier endpoint `/skills/status` recoit bien les status
-
-#### OnyxCore
-- [x] Vérifier endpoint `/status` reçoit bien les status forwardés
-- [ ] Créer endpoint `POST /api/refresh` pour refresh global
-- [ ] S'assurer que les métriques sont bien relayées
-
-### Moyenne Priorité
-
-#### Brain3D
-- [ ] Ajouter bouton "Refresh" pour forcer poll des skills
-- [ ] Passer fréquence métriques à 1s
-- [ ] Supprimer réception directe des métriques (passer par OnyxCore)
-
-### Basse Priorité
-
-#### Skill vpn-connector (nouveau)
-- [ ] Créer skill Python pour gérer les connexions VPN
-- [ ] Endpoints : `/connect`, `/disconnect`, `/status`
-- [ ] Auto-reconnexion configurable
+### Debug affichage machines
+- [ ] **Probleme**: Seule OnyxSoma (Core) s'affiche dans la vue 3D
+- [ ] L'API retourne 8 machines mais seulement 1 est rendue
+- [ ] Verifier le parsing machine_type dans le frontend
+- [ ] Verifier que les autres types (heart, forge) sont bien crees
 
 ---
 
-## Fichiers Créés (18 dec 2025)
+## A Faire
 
-```
-/mnt/verso-data/cluster/apps/
-├── onyx-heart-v2/
-│   ├── main.go          # ~500 lignes, tout en un
-│   ├── go.mod
-│   ├── go.sum
-│   ├── heart.yaml       # Config exemple
-│   ├── Makefile         # Build multi-plateforme
-│   ├── README.md
-│   └── onyxheart        # Binaire compilé
-│
-└── onyx-sdk/
-    ├── onyx_sdk.py      # SDK Python
-    ├── setup.py         # Installation pip
-    └── README.md
-```
+### Haute Priorite
+
+#### Frontend 3D
+- [ ] Corriger l'affichage de toutes les machines
+- [ ] Verifier les formes: Cube (heart), Icosa (forge), Dodeca (core)
+- [ ] Tester les animations par statut
+- [ ] Ajouter labels sur les machines
+
+#### Backend
+- [ ] Verifier integration Redis temps reel
+- [ ] Tester propagation des status_change
+- [ ] Verifier heritage des statuts (skill → aire → machine)
+
+### Moyenne Priorite
+
+#### Vue interne machine
+- [ ] Drill-down sur clic machine
+- [ ] Afficher Heart + aires + skills
+- [ ] Bouton retour vers vue reseau
+
+#### Metriques temps reel
+- [ ] Panel metriques toggleable
+- [ ] Graphes CPU/RAM/Disk
+- [ ] Torus autour des machines (anneaux metriques)
+
+### Basse Priorite
+
+#### Polish
+- [ ] Transitions fluides entre vues
+- [ ] Gestion deconnexion Redis (fallback HTTP)
+- [ ] Support mobile/touch
+- [ ] Responsive design
 
 ---
 
-## Usage Rapide
+## Architecture Actuelle
 
-### OnyxHeart v2
+```
+                    REDIS (10.0.0.44:6379)
+                           │
+                    onyx:events
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    BRAIN3D v3.0.0                           │
+│                                                             │
+│  Backend (FastAPI)          Frontend (Three.js)            │
+│  ┌─────────────────┐        ┌─────────────────────┐        │
+│  │ redis_client    │        │ scene.js            │        │
+│  │ core_client     │◄──────►│ physics.js          │        │
+│  │ state_manager   │        │ machines.js         │        │
+│  │ websocket_mgr   │        │ animations.js       │        │
+│  └─────────────────┘        └─────────────────────┘        │
+│         │                            ▲                      │
+│         └────────── WebSocket ───────┘                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Types de Machines
+
+| Type | Forme | Exemple |
+|------|-------|---------|
+| `core` | Dodecaedre | OnyxSoma (Core + Heart) |
+| `forge` | Icosaedre | OnyxLab (Forge + Heart) |
+| `heart` | Cube | Machines avec Heart uniquement |
+| `network` | Sphere bleue | Devices sans Heart |
+
+## Couleurs Statuts
+
+| Statut | Hex | Animation |
+|--------|-----|-----------|
+| UP | #00ff88 | pulse-slow |
+| WORKING | #ff00ff | pulse-fast |
+| DOWN | #555555 | none |
+| ERROR | #ff8800 | blink |
+| UNKNOWN | #4488ff | none |
+
+---
+
+## Commandes Utiles
 
 ```bash
-# Build
-cd /mnt/verso-data/cluster/apps/onyx-heart-v2
-make build
+# Lancer Brain3D dev
+BRAIN3D_DEV=true python -m src.main
 
-# Run
-./onyxheart --core http://10.0.0.11:8000
+# Tester API
+curl http://localhost:9888/health
+curl http://localhost:9888/api/state | jq
 
-# Test endpoints
-curl http://localhost:8900/health
-curl http://localhost:8900/status
-curl http://localhost:8900/metrics
+# Logs
+tail -f /var/log/brain3d.log
 
-# Test skill status
-curl -X POST http://localhost:8900/skills/status \
-  -H "Content-Type: application/json" \
-  -d '{"skill_name":"test","status":"up","brain_area":"temporal"}'
-```
-
-### onyx-sdk v2
-
-```python
-from onyx_sdk import OnyxClient
-
-onyx = OnyxClient("mon-skill", brain_area="temporal", port=8100)
-
-# Status simples
-onyx.up("Ready")
-onyx.working("Processing...")
-onyx.error("Failed")
-
-# Context manager
-with onyx.task("Processing batch"):
-    do_work()
-# Auto up() à la fin
+# Test Core endpoints
+curl http://10.0.0.44:8050/nodes/health | jq
+curl http://10.0.0.44:8050/skills | jq
 ```
 
 ---
 
-## Notes Techniques
+## Notes
 
-| Service | Port Dev | Port Prod |
-|---------|----------|-----------|
-| Brain3D | 9888 | 8888 |
-| OnyxCore | - | 8000 |
-| OnyxHeart | - | 8900 |
+- OnyxLab (192.168.122.66) accessible via Dendrite (10.0.0.13)
+- Ports 8000-9999 forwardes via iptables
+- Brain3D dev sur port 9888, prod sur 8888
+- Toutes les machines ont un Heart
+- OnyxSoma a Core + Heart
+- OnyxLab a Forge + Heart

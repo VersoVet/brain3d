@@ -1,93 +1,154 @@
 {
-    "name": "brain3d",
-    "display_name": "Brain3D Visualizer",
-    "version": "2.0.0",
-    "description": "Visualisation 3D temps reel du cerveau Onyx",
-    "long_description": "Interface de monitoring 3D interactive affichant l'etat des skills et aires cerebrales. Connexion WebSocket pour mises a jour en temps reel. Vues: cerveau global, detail par aire, reseau machines.",
-    "category": "monitoring",
-    "brain_area": "cortex-prefrontal",
-    "author": "Onyx",
-    "icon": "🧠",
-    "color": "#00d4aa",
-    "port": 9888,
-    "mcp_port": 9988,
-    "protocol": "http",
-    "has_web_ui": true,
-    "web_url": "http://10.0.0.11:9888",
-    "health_endpoint": "/health",
-    "critical": true,
-    "priority": 1,
-    "endpoints": [
-        {
-            "method": "GET",
-            "path": "/",
-            "description": "Page principale Brain3D"
-        },
-        {
-            "method": "GET",
-            "path": "/health",
-            "description": "Health check"
-        },
-        {
-            "method": "GET",
-            "path": "/architecture",
-            "description": "Architecture 3D complete"
-        },
-        {
-            "method": "GET",
-            "path": "/areas/{area_id}",
-            "description": "Detail d'une aire cerebrale"
-        },
-        {
-            "method": "GET",
-            "path": "/states",
-            "description": "Etats actuels des skills"
-        },
-        {
-            "method": "GET",
-            "path": "/connections",
-            "description": "Stats WebSocket"
-        },
-        {
-            "method": "WS",
-            "path": "/ws",
-            "description": "WebSocket temps reel"
-        },
-        {
-            "method": "WS",
-            "path": "/ws/area/{area_id}",
-            "description": "WebSocket filtre par aire"
-        }
-    ],
-    "dependencies": [],
-    "tags": [
-        "monitoring",
-        "3d",
-        "visualization",
-        "websocket",
-        "real-time"
-    ],
-    "deployment": {
-        "mode": "direct",
-        "port": 9888,
-        "auto_start": true,
-        "restart_policy": "always"
+  "name": "brain3d",
+  "display_name": "Brain3D Visualizer",
+  "version": "3.0.0",
+  "description": "Visualisation 3D temps reel du reseau Onyx avec Message Bus Redis",
+  "long_description": "Interface de monitoring 3D interactive avec layout force-directed. Communication temps reel via Redis Message Bus. Vues: reseau global (machines), vue interne (Core/Heart/Aires/Skills). Heritage des statuts avec propagation automatique.",
+  "category": "monitoring",
+  "brain_area": "cortex-prefrontal",
+  "author": "Onyx",
+  "icon": "\ud83e\udde0",
+  "color": "#00d4aa",
+  "port": 8888,
+  "dev_port": 9888,
+  "protocol": "http",
+  "has_web_ui": true,
+  "web_url": "http://10.0.0.44:8888",
+  "health_endpoint": "/health",
+  "critical": true,
+  "priority": 1,
+
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/",
+      "description": "Page principale Brain3D"
     },
-    "requirements": {
-        "python": ">=3.10",
-        "packages": ["fastapi", "uvicorn", "websockets", "httpx"]
+    {
+      "method": "GET",
+      "path": "/health",
+      "description": "Health check"
     },
-    "brain3d": {
-        "visible": false,
-        "reason": "Brain3D est le visualiseur, il ne se visualise pas lui-meme"
+    {
+      "method": "GET",
+      "path": "/status",
+      "description": "Statut detaille (Redis, WS clients)"
     },
-    "integration": {
-        "onyxheart": true,
-        "onyxcore": true
+    {
+      "method": "GET",
+      "path": "/api/state",
+      "description": "Etat complet du reseau"
     },
-    "dashboard": {
-        "enabled": true,
-        "path": "/",
-        "title": "Brain3D Visualizer"
+    {
+      "method": "GET",
+      "path": "/api/machines",
+      "description": "Liste des machines"
+    },
+    {
+      "method": "GET",
+      "path": "/api/machines/{node_id}",
+      "description": "Detail d'une machine"
+    },
+    {
+      "method": "GET",
+      "path": "/api/skills",
+      "description": "Liste des skills"
+    },
+    {
+      "method": "GET",
+      "path": "/api/skills/{name}",
+      "description": "Detail d'un skill"
+    },
+    {
+      "method": "GET",
+      "path": "/api/areas",
+      "description": "Liste des aires cerebrales"
+    },
+    {
+      "method": "GET",
+      "path": "/api/areas/{area_id}",
+      "description": "Detail d'une aire"
+    },
+    {
+      "method": "POST",
+      "path": "/api/refresh",
+      "description": "Force refresh de l'etat"
+    },
+    {
+      "method": "WS",
+      "path": "/ws",
+      "description": "WebSocket temps reel"
     }
+  ],
+
+  "dependencies": [],
+
+  "tags": [
+    "monitoring",
+    "3d",
+    "visualization",
+    "websocket",
+    "real-time",
+    "redis",
+    "force-directed"
+  ],
+
+  "deployment": {
+    "host": "10.0.0.44",
+    "host_name": "OnyxSoma",
+    "port": 8888,
+    "protocol": "http",
+    "mode": "direct",
+    "auto_start": true,
+    "restart_policy": "always"
+  },
+
+  "development": {
+    "dev_platform": "onyxlab",
+    "dev_path": "/home/onyx/projects/skills",
+    "test_platform": "onyxlab",
+    "remote_mount": false
+  },
+
+  "requirements": {
+    "python": ">=3.10",
+    "min_ram_mb": 256,
+    "min_disk_mb": 100,
+    "packages": [
+      "fastapi>=0.109.0",
+      "uvicorn[standard]>=0.27.0",
+      "redis>=5.0.0",
+      "httpx>=0.25.0",
+      "pydantic>=2.0.0",
+      "jinja2>=3.0.0",
+      "websockets>=12.0"
+    ]
+  },
+
+  "brain3d": {
+    "visible": false,
+    "reason": "Brain3D est le visualiseur, il ne se visualise pas lui-meme"
+  },
+
+  "integration": {
+    "onyxheart": true,
+    "onyxcore": true,
+    "redis": true,
+    "events_subscribed": ["onyx:events"],
+    "events_published": []
+  },
+
+  "dashboard": {
+    "enabled": true,
+    "path": "/",
+    "title": "Brain3D Visualizer"
+  },
+
+  "forge": {
+    "development": {
+      "progress_percent": 60,
+      "dev_status": "in_progress",
+      "last_update": "2025-12-31"
+    }
+  }
 }

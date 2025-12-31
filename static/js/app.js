@@ -1,0 +1,190 @@
+/**
+ * Brain3D - Main Application
+ */
+
+class Brain3DApp {
+    constructor() {
+        this.state = null;
+        this.initialized = false;
+    }
+
+    async init() {
+        console.log('Initializing Brain3D...');
+
+        // Initialize scene
+        const container = document.getElementById('canvas-container');
+        scene3d = new Brain3DScene(container);
+
+        // Initialize renderers
+        machineRenderer = new MachineRenderer(scene3d);
+        connectionRenderer = new ConnectionRenderer(scene3d);
+        internalRenderer = new InternalViewRenderer(scene3d);
+
+        // Initialize managers
+        navigation = new NavigationManager(scene3d, this);
+        ui = new UIManager();
+
+        // Start animations
+        animationManager.start();
+
+        // Setup WebSocket callbacks
+        this._setupWebSocketCallbacks();
+
+        // Connect WebSocket
+        wsClient.connect();
+
+        // Start physics update loop
+        this._startPhysicsLoop();
+
+        this.initialized = true;
+        console.log('Brain3D initialized');
+    }
+
+    _setupWebSocketCallbacks() {
+        // Initial state
+        wsClient.on('onRefresh', (state) => {
+            console.log('Received state:', state);
+            this.state = state;
+            this._renderState(state);
+        });
+
+        // Status updates
+        wsClient.on('onStatusUpdate', (data) => {
+            console.log('Status update:', data);
+            this._handleStatusUpdate(data);
+        });
+
+        // Metrics updates
+        wsClient.on('onMetricsUpdate', (data) => {
+            console.log('Metrics update:', data);
+            this._handleMetricsUpdate(data);
+        });
+
+        // Topology changes
+        wsClient.on('onTopologyChange', (data) => {
+            console.log('Topology change:', data);
+            this._handleTopologyChange(data);
+        });
+    }
+
+    _renderState(state) {
+        if (!state) return;
+
+        console.log('Rendering state:', state);
+        console.log('Machines count:', state.machines?.length);
+
+        // Update stats
+        ui?.updateStats(state);
+
+        // Render machines
+        if (state.machines) {
+            console.log('Creating machines:', state.machines.map(m => m.hostname));
+            machineRenderer.createAllMachines(state.machines);
+
+            // Setup animations based on status
+            state.machines.forEach(machine => {
+                animationManager.updateFromStatus(machine.node_id, machine.status);
+            });
+
+            // Create connections
+            connectionRenderer.createAllConnections(state.machines);
+        }
+    }
+
+    _handleStatusUpdate(data) {
+        const { target, id, status } = data;
+
+        if (target === 'machine' || target === 'skill') {
+            // Update machine visual
+            machineRenderer.updateMachine(id, { status });
+
+            // Update animation
+            animationManager.updateFromStatus(id, status);
+        }
+
+        // Update stats if we have full state
+        if (this.state) {
+            // Recalculate stats
+            const machines = Object.values(this.state.machines || {});
+            const skills = Object.values(this.state.skills || {});
+
+            ui?.updateStats({
+                total_machines: machines.length,
+                total_skills: skills.length,
+                skills_up: skills.filter(s => s.status === 'UP').length,
+                skills_working: skills.filter(s => s.status === 'WORKING').length,
+                skills_error: skills.filter(s => s.status === 'ERROR').length,
+            });
+        }
+    }
+
+    _handleMetricsUpdate(data) {
+        const { node_id, metrics } = data;
+
+        // Update machine data
+        if (this.state?.machines) {
+            const machine = this.state.machines.find(m => m.node_id === node_id);
+            if (machine) {
+                machine.metrics = metrics;
+
+                // If this machine is selected, update info panel
+                if (navigation?.selectedMachine === node_id) {
+                    ui?.showMachineInfo(machine);
+                }
+            }
+        }
+    }
+
+    _handleTopologyChange(data) {
+        const { action, entity_type, entity } = data;
+
+        if (entity_type === 'machine') {
+            if (action === 'add') {
+                machineRenderer.createMachine(entity);
+                // Find core and create connection
+                const core = this.state?.machines?.find(m => m.machine_type === 'core');
+                if (core) {
+                    connectionRenderer.createConnection(entity.node_id, core.node_id, {
+                        dashed: entity.machine_type === 'network',
+                    });
+                }
+            } else if (action === 'remove') {
+                machineRenderer.removeMachine(entity.node_id);
+            }
+        }
+    }
+
+    _startPhysicsLoop() {
+        const update = () => {
+            // Update physics
+            physics.update();
+
+            // Update mesh positions
+            machineRenderer.updateAllPositions();
+
+            // Update connection lines
+            connectionRenderer.updateAllConnections();
+
+            requestAnimationFrame(update);
+        };
+
+        update();
+    }
+
+    // Public API for debugging
+    getState() {
+        return this.state;
+    }
+
+    refresh() {
+        wsClient.requestRefresh();
+    }
+}
+
+// Initialize app when DOM is ready
+let app = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    app = new Brain3DApp();
+    app.init();
+});
