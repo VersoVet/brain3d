@@ -73,9 +73,20 @@ class Machine(BaseModel):
     status: Status = Status.UNKNOWN
     has_heart: bool = False
 
+    # Infos Heart
+    heart_version: Optional[str] = None
+    heart_status: Optional[str] = None  # "up", "down", "unknown"
+
     # Infos systeme
     platform: str = "unknown"
     version: str = "0.0.0"
+
+    # Skills count (depuis /deploy/nodes)
+    skills_count: int = 0        # Nombre total de skills
+    skills_installed: int = 0    # Skills installes
+
+    # Heart Proxy (pour type proxy_target)
+    proxy_heart: Optional[str] = None  # Hostname du Heart Proxy surveillant cette machine
 
     # Metriques
     metrics: Metrics = Field(default_factory=Metrics)
@@ -94,7 +105,9 @@ class Machine(BaseModel):
     wol_enabled: bool = False
     managed: bool = False
     last_heartbeat: Optional[datetime] = None
+    last_seen: Optional[datetime] = None  # Dernier contact (depuis /deploy/nodes)
     uptime_seconds: int = 0
+    tags: List[str] = Field(default_factory=list)  # Tags depuis Core
 
 
 class Heart(BaseModel):

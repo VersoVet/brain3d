@@ -14,10 +14,11 @@ const CONFIG = {
 
     // Couleurs par type de machine
     MACHINE_COLORS: {
-        heart: 0x00ff88,    // Vert (selon statut)
-        network: 0x4488ff,  // Bleu
-        core: 0x00d4aa,     // Cyan
-        forge: 0xaa44ff,    // Violet
+        heart: 0x00ff88,        // Vert (selon statut)
+        network: 0x4488ff,      // Bleu
+        core: 0x00d4aa,         // Cyan
+        forge: 0xaa44ff,        // Violet
+        proxy_target: 0x88aaff, // Bleu clair (via Heart Proxy)
     },
 
     // Tailles des objets 3D
@@ -146,8 +147,13 @@ const getStatusColor = (status) => {
 };
 
 const getMachineColor = (type, status) => {
+    // Types avec couleur fixe (pas de Heart)
     if (type === 'network') {
         return CONFIG.MACHINE_COLORS.network;
     }
+    if (type === 'proxy_target') {
+        return CONFIG.MACHINE_COLORS.proxy_target;
+    }
+    // Types avec couleur selon statut
     return getStatusColor(status);
 };

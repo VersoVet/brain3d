@@ -218,7 +218,7 @@ class MachineRenderer {
     }
 
     /**
-     * Standard machines (Heart, Network)
+     * Standard machines (Heart, Network, Proxy Target)
      */
     _createStandardMesh(machine, type, status) {
         const group = new THREE.Group();
@@ -231,6 +231,10 @@ class MachineRenderer {
                 // Cube avec transparence
                 geometry = new THREE.BoxGeometry(baseSize, baseSize, baseSize);
                 break;
+            case 'proxy_target':
+                // Cube pointillé (machine sans Heart, via Heart Proxy)
+                geometry = new THREE.BoxGeometry(baseSize * 0.9, baseSize * 0.9, baseSize * 0.9);
+                break;
             case 'network':
             default:
                 // Sphère de même taille que les cubes
@@ -238,19 +242,25 @@ class MachineRenderer {
                 break;
         }
 
+        // Opacité selon le type et statut
+        let opacity = status === 'DOWN' ? 0.3 : 0.7;
+        if (type === 'proxy_target') {
+            opacity = status === 'DOWN' ? 0.15 : 0.35; // Plus transparent (via proxy)
+        }
+
         // Matériau principal avec transparence
         const material = new THREE.MeshPhongMaterial({
             color: color,
             emissive: color,
-            emissiveIntensity: 0.25,
+            emissiveIntensity: type === 'proxy_target' ? 0.15 : 0.25,
             transparent: true,
-            opacity: status === 'DOWN' ? 0.3 : 0.7, // Transparence ajoutée
+            opacity: opacity,
         });
 
         const mesh = new THREE.Mesh(geometry, material);
         group.add(mesh);
 
-        // Wireframe pour les cubes (heart)
+        // Wireframe pour les cubes (heart et proxy_target)
         if (type === 'heart') {
             const wireGeom = new THREE.BoxGeometry(baseSize * 1.02, baseSize * 1.02, baseSize * 1.02);
             const wireMat = new THREE.MeshBasicMaterial({
@@ -260,17 +270,44 @@ class MachineRenderer {
                 opacity: 0.5,
             });
             group.add(new THREE.Mesh(wireGeom, wireMat));
+        } else if (type === 'proxy_target') {
+            // Wireframe pointillé pour proxy_target
+            const wireGeom = new THREE.BoxGeometry(baseSize * 0.95, baseSize * 0.95, baseSize * 0.95);
+            const wireMat = new THREE.LineDashedMaterial({
+                color: color,
+                dashSize: 0.3,
+                gapSize: 0.2,
+                transparent: true,
+                opacity: 0.6,
+            });
+            // Utiliser EdgesGeometry pour les lignes
+            const edges = new THREE.EdgesGeometry(wireGeom);
+            const wireframe = new THREE.LineSegments(edges, wireMat);
+            wireframe.computeLineDistances(); // Requis pour le dashed
+            group.add(wireframe);
+
+            // Ajouter un petit indicateur "proxy"
+            const indicatorGeom = new THREE.RingGeometry(baseSize * 0.15, baseSize * 0.2, 16);
+            const indicatorMat = new THREE.MeshBasicMaterial({
+                color: 0x88aaff,
+                transparent: true,
+                opacity: 0.7,
+                side: THREE.DoubleSide,
+            });
+            const indicator = new THREE.Mesh(indicatorGeom, indicatorMat);
+            indicator.position.y = baseSize * 0.6;
+            indicator.rotation.x = Math.PI / 2;
+            group.add(indicator);
         }
 
         // Glow externe
-        const glowSize = type === 'heart' ? baseSize * 0.6 : baseSize * 0.6;
-        const glowGeom = type === 'heart'
+        const glowGeom = (type === 'heart' || type === 'proxy_target')
             ? new THREE.BoxGeometry(baseSize * 1.3, baseSize * 1.3, baseSize * 1.3)
             : new THREE.SphereGeometry(baseSize * 0.65, 16, 16);
         const glowMat = new THREE.MeshBasicMaterial({
             color: color,
             transparent: true,
-            opacity: 0.12,
+            opacity: type === 'proxy_target' ? 0.06 : 0.12,
             side: THREE.BackSide,
         });
         group.add(new THREE.Mesh(glowGeom, glowMat));
@@ -437,10 +474,10 @@ class MachineRenderer {
         console.log('MachineRenderer.createAllMachines called with', machines.length, 'machines');
         this.clear();
 
-        // Sort: core first, then forge, then hearts, then network
+        // Sort: core first, then forge, then hearts, then proxy_target, then network
         const sorted = [...machines].sort((a, b) => {
-            const order = { core: 0, forge: 1, heart: 2, network: 3 };
-            return (order[a.machine_type] || 3) - (order[b.machine_type] || 3);
+            const order = { core: 0, forge: 1, heart: 2, proxy_target: 3, network: 4 };
+            return (order[a.machine_type] || 4) - (order[b.machine_type] || 4);
         });
 
         sorted.forEach(machine => {

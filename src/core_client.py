@@ -31,7 +31,7 @@ class CoreAPIClient:
     # === MACHINES / NODES ===
 
     async def get_nodes_health(self) -> List[dict]:
-        """Recupere la sante de tous les Hearts via /nodes/health"""
+        """Recupere la sante de tous les Hearts via /nodes/health (legacy)"""
         try:
             resp = await self._http_client.get(f"{self.core_url}/nodes/health")
             if resp.status_code == 200:
@@ -44,62 +44,130 @@ class CoreAPIClient:
             logger.error(f"Get nodes health failed: {e}")
         return []
 
+    async def get_deploy_nodes(self) -> List[dict]:
+        """Recupere les infos de deploiement via /deploy/nodes (prefere)
+
+        Retourne des donnees plus riches:
+        - hostname, ip, heart_version, heart_status
+        - skills_count, skills_installed, last_seen, tags
+        """
+        try:
+            resp = await self._http_client.get(f"{self.core_url}/deploy/nodes")
+            if resp.status_code == 200:
+                data = resp.json()
+                # Core retourne {nodes: [...]} ou directement une liste
+                if isinstance(data, dict):
+                    return data.get("nodes", data.get("results", []))
+                return data if isinstance(data, list) else []
+        except Exception as e:
+            logger.error(f"Get deploy nodes failed: {e}")
+        return []
+
     async def get_all_machines(self) -> List[Machine]:
         """
         Recupere toutes les machines via Core.
-        Retourne une liste unifiee.
+        Utilise /deploy/nodes en priorite (donnees plus riches),
+        avec fallback sur /nodes/health.
         """
         machines_list: List[Machine] = []
 
-        # Recuperer via Core API
-        nodes_data = await self.get_nodes_health()
+        # Essayer /deploy/nodes en priorite
+        deploy_nodes = await self.get_deploy_nodes()
 
-        for node in nodes_data:
-            # Extraire les champs (le SDK retourne des dicts)
-            ip = node.get("node_ip", node.get("ip", ""))
-            hostname = node.get("node", node.get("hostname", ""))
+        if deploy_nodes:
+            # Utiliser les donnees enrichies de /deploy/nodes
+            for node in deploy_nodes:
+                ip = node.get("id", node.get("ip", ""))
+                hostname = node.get("hostname", "")
 
-            # Corriger le hostname si manquant ou "unknown" via mapping IP
-            if not hostname or hostname == "unknown":
-                hostname = IP_TO_HOSTNAME.get(ip, f"device-{ip.split('.')[-1]}" if ip else "unknown")
+                # Corriger le hostname si manquant
+                if not hostname or hostname == "unknown":
+                    hostname = IP_TO_HOSTNAME.get(ip, f"device-{ip.split('.')[-1]}" if ip else "unknown")
 
-            # Determiner le type de machine
-            machine_type = SPECIAL_NODES.get(hostname, MachineType.HEART)
+                # Determiner le type de machine
+                machine_type = SPECIAL_NODES.get(hostname, MachineType.HEART)
 
-            # Convertir status
-            status_str = node.get("status", "unknown")
-            if status_str == "healthy":
-                status = Status.UP
-            elif status_str == "degraded":
-                status = Status.ERROR
-            elif not node.get("online", True):
-                status = Status.DOWN
-            else:
-                status_upper = status_str.upper()
-                status = Status(status_upper) if status_upper in Status.__members__ else Status.UNKNOWN
+                # Statut depuis heart_status
+                heart_status = node.get("heart_status", "unknown")
+                if heart_status == "up":
+                    status = Status.UP
+                elif heart_status == "down":
+                    status = Status.DOWN
+                else:
+                    status = Status.UNKNOWN
 
-            machine = Machine(
-                node_id=node.get("node_id", hostname),
-                hostname=hostname,
-                ip=ip,
-                machine_type=machine_type,
-                status=status,
-                has_heart=node.get("registered", False) or node.get("sdk", False),
-                platform=node.get("platform", "unknown"),
-                version=node.get("version", "0.0.0"),
-                skills=node.get("skills", []),
-                metrics=Metrics(
-                    cpu_percent=node.get("cpu_percent", 0),
-                    cpu_count=node.get("cpu_count", 0),
-                    ram_total_mb=node.get("ram_mb", 0),
-                    ram_percent=node.get("ram_percent", 0),
-                    load_avg=node.get("load_avg", [0, 0, 0]),
-                    temp_celsius=node.get("temp_c"),
-                ),
-                uptime_seconds=node.get("uptime_seconds", 0),
-                last_heartbeat=datetime.now(),
-            )
-            machines_list.append(machine)
+                # Parser last_seen
+                last_seen = None
+                last_seen_str = node.get("last_seen")
+                if last_seen_str:
+                    try:
+                        last_seen = datetime.fromisoformat(last_seen_str.replace("Z", "+00:00"))
+                    except (ValueError, TypeError):
+                        pass
+
+                machine = Machine(
+                    node_id=hostname or ip,
+                    hostname=hostname,
+                    ip=ip,
+                    machine_type=machine_type,
+                    status=status,
+                    has_heart=node.get("heart_version") is not None,
+                    heart_version=node.get("heart_version"),
+                    heart_status=heart_status,
+                    skills_count=node.get("skills_count", 0),
+                    skills_installed=node.get("skills_installed", 0),
+                    tags=node.get("tags", []),
+                    last_seen=last_seen,
+                    last_heartbeat=last_seen or datetime.now(),
+                )
+                machines_list.append(machine)
+        else:
+            # Fallback sur /nodes/health
+            nodes_data = await self.get_nodes_health()
+            logger.warning("Using fallback /nodes/health (deploy/nodes unavailable)")
+
+            for node in nodes_data:
+                ip = node.get("node_ip", node.get("ip", ""))
+                hostname = node.get("node", node.get("hostname", ""))
+
+                if not hostname or hostname == "unknown":
+                    hostname = IP_TO_HOSTNAME.get(ip, f"device-{ip.split('.')[-1]}" if ip else "unknown")
+
+                machine_type = SPECIAL_NODES.get(hostname, MachineType.HEART)
+
+                status_str = node.get("status", "unknown")
+                if status_str == "healthy":
+                    status = Status.UP
+                elif status_str == "degraded":
+                    status = Status.ERROR
+                elif not node.get("online", True):
+                    status = Status.DOWN
+                else:
+                    status_upper = status_str.upper()
+                    status = Status(status_upper) if status_upper in Status.__members__ else Status.UNKNOWN
+
+                machine = Machine(
+                    node_id=node.get("node_id", hostname),
+                    hostname=hostname,
+                    ip=ip,
+                    machine_type=machine_type,
+                    status=status,
+                    has_heart=node.get("registered", False) or node.get("sdk", False),
+                    platform=node.get("platform", "unknown"),
+                    version=node.get("version", "0.0.0"),
+                    skills=node.get("skills", []),
+                    metrics=Metrics(
+                        cpu_percent=node.get("cpu_percent", 0),
+                        cpu_count=node.get("cpu_count", 0),
+                        ram_total_mb=node.get("ram_mb", 0),
+                        ram_percent=node.get("ram_percent", 0),
+                        load_avg=node.get("load_avg", [0, 0, 0]),
+                        temp_celsius=node.get("temp_c"),
+                    ),
+                    uptime_seconds=node.get("uptime_seconds", 0),
+                    last_heartbeat=datetime.now(),
+                )
+                machines_list.append(machine)
 
         # Ajouter les machines connues non detectees par Core
         existing_ids = {m.node_id for m in machines_list}

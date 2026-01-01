@@ -56,6 +56,7 @@ class MachineType(str, Enum):
     NETWORK = "network"       # Device reseau sans Heart
     CORE = "core"             # OnyxSoma (Core)
     FORGE = "forge"           # OnyxLab (Forge)
+    PROXY_TARGET = "proxy_target"  # Machine sans Heart, surveillee par Heart Proxy
 
 
 # Formes 3D par type de machine
@@ -64,6 +65,7 @@ MACHINE_SHAPES: Dict[str, str] = {
     MachineType.NETWORK: "sphere",
     MachineType.CORE: "dodecahedron",
     MachineType.FORGE: "icosahedron",
+    MachineType.PROXY_TARGET: "cube",  # Cube pointille/transparent
 }
 
 # Couleurs de base par type
@@ -72,6 +74,7 @@ MACHINE_BASE_COLORS: Dict[str, str] = {
     MachineType.NETWORK: "#4488ff",   # Bleu
     MachineType.CORE: "#00d4aa",      # Cyan
     MachineType.FORGE: "#aa44ff",     # Violet
+    MachineType.PROXY_TARGET: "#88aaff",  # Bleu clair (proxy)
 }
 
 

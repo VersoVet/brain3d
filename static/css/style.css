@@ -200,6 +200,13 @@ body {
 
 .legend-shape.cyan { background: #00d4aa; }
 .legend-shape.violet { background: #aa44ff; }
+.legend-shape.lightblue { background: #88aaff; }
+
+.legend-shape.cube-dashed {
+    background: transparent;
+    border: 2px dashed #88aaff;
+    border-radius: 2px;
+}
 
 /* Info Panel */
 #info-panel {
