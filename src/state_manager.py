@@ -103,11 +103,21 @@ class StateManager:
         """
         Calcule le statut d'une machine.
         - Si pas de Heart: UNKNOWN (device reseau)
-        - Si Heart: herite du statut du Heart
+        - Si Heart: utilise heart_status direct, sinon calcule depuis skills
         """
         if not machine.has_heart:
             return Status.UNKNOWN
 
+        # Utiliser heart_status direct si disponible
+        if machine.heart_status:
+            status_map = {
+                "up": Status.UP,
+                "down": Status.DOWN,
+                "unknown": Status.UNKNOWN
+            }
+            return status_map.get(machine.heart_status.lower(), Status.UNKNOWN)
+
+        # Fallback: calculer depuis les skills
         return self._calculate_heart_status(machine.node_id)
 
     def _propagate_status_changes(self) -> List[dict]:
