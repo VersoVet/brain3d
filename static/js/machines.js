@@ -221,32 +221,61 @@ class MachineRenderer {
      * Standard machines (Heart, Network)
      */
     _createStandardMesh(machine, type, status) {
+        const group = new THREE.Group();
+        const baseSize = CONFIG.SIZES.machine * 1.5; // Taille augmentée
         let geometry;
+        let color = getMachineColor(type, status);
 
         switch (type) {
             case 'heart':
-                geometry = new THREE.BoxGeometry(
-                    CONFIG.SIZES.machine,
-                    CONFIG.SIZES.machine,
-                    CONFIG.SIZES.machine
-                );
+                // Cube avec transparence
+                geometry = new THREE.BoxGeometry(baseSize, baseSize, baseSize);
                 break;
             case 'network':
             default:
-                geometry = new THREE.SphereGeometry(CONFIG.SIZES.machine * 0.8, 32, 32);
+                // Sphère de même taille que les cubes
+                geometry = new THREE.SphereGeometry(baseSize * 0.5, 32, 32);
                 break;
         }
 
-        const color = getMachineColor(type, status);
+        // Matériau principal avec transparence
         const material = new THREE.MeshPhongMaterial({
             color: color,
             emissive: color,
-            emissiveIntensity: 0.2,
+            emissiveIntensity: 0.25,
             transparent: true,
-            opacity: status === 'DOWN' ? 0.5 : 1,
+            opacity: status === 'DOWN' ? 0.3 : 0.7, // Transparence ajoutée
         });
 
-        return new THREE.Mesh(geometry, material);
+        const mesh = new THREE.Mesh(geometry, material);
+        group.add(mesh);
+
+        // Wireframe pour les cubes (heart)
+        if (type === 'heart') {
+            const wireGeom = new THREE.BoxGeometry(baseSize * 1.02, baseSize * 1.02, baseSize * 1.02);
+            const wireMat = new THREE.MeshBasicMaterial({
+                color: color,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.5,
+            });
+            group.add(new THREE.Mesh(wireGeom, wireMat));
+        }
+
+        // Glow externe
+        const glowSize = type === 'heart' ? baseSize * 0.6 : baseSize * 0.6;
+        const glowGeom = type === 'heart'
+            ? new THREE.BoxGeometry(baseSize * 1.3, baseSize * 1.3, baseSize * 1.3)
+            : new THREE.SphereGeometry(baseSize * 0.65, 16, 16);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.12,
+            side: THREE.BackSide,
+        });
+        group.add(new THREE.Mesh(glowGeom, glowMat));
+
+        return group;
     }
 
     _addGlow(mesh, color) {
@@ -272,9 +301,18 @@ class MachineRenderer {
             mesh.userData.status = updates.status;
             const color = getMachineColor(mesh.userData.type, updates.status);
 
-            mesh.material.color.setHex(color);
-            mesh.material.emissive.setHex(color);
-            mesh.material.opacity = updates.status === 'DOWN' ? 0.5 : 1;
+            // Update all children materials (for groups)
+            mesh.traverse((child) => {
+                if (child.material) {
+                    if (child.material.color) child.material.color.setHex(color);
+                    if (child.material.emissive) child.material.emissive.setHex(color);
+                    // Adjust opacity for DOWN status
+                    if (child.material.opacity !== undefined && !child.material.wireframe) {
+                        const baseOpacity = child.material.side === THREE.BackSide ? 0.12 : 0.7;
+                        child.material.opacity = updates.status === 'DOWN' ? baseOpacity * 0.4 : baseOpacity;
+                    }
+                }
+            });
         }
 
         // Update position from physics
@@ -299,6 +337,10 @@ class MachineRenderer {
 
     getMesh(nodeId) {
         return this.meshes.get(nodeId);
+    }
+
+    getAllMeshes() {
+        return this.meshes;
     }
 
     updateAllPositions() {

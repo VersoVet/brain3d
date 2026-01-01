@@ -150,6 +150,17 @@ class WebSocketManager:
         }
         return await self.broadcast(message)
 
+    async def broadcast_redis_event(self, event_type: str, node: str, data: dict) -> int:
+        """Broadcast un événement Redis pour visualisation Message Bus"""
+        message = {
+            "type": "redis_event",
+            "event_type": event_type,
+            "node": node,
+            "data": data,
+            "timestamp": datetime.now().isoformat(),
+        }
+        return await self.broadcast(message)
+
     async def set_client_focus(
         self,
         client_id: str,

@@ -65,6 +65,14 @@ class Brain3DApp {
             console.log('Topology change:', data);
             this._handleTopologyChange(data);
         });
+
+        // Redis Message Bus events - for particle visualization
+        wsClient.on('onRedisEvent', (data) => {
+            // Forward to connection renderer for particle animation
+            if (connectionRenderer) {
+                connectionRenderer.handleRedisEvent(data);
+            }
+        });
     }
 
     _renderState(state) {

@@ -15,6 +15,7 @@ class Brain3DWebSocket {
             onMetricsUpdate: [],
             onTopologyChange: [],
             onRefresh: [],
+            onRedisEvent: [],
         };
     }
 
@@ -88,6 +89,11 @@ class Brain3DWebSocket {
 
             case 'pong':
                 // Response to our ping
+                break;
+
+            case 'redis_event':
+                // Redis Message Bus event for visualization
+                this._trigger('onRedisEvent', data);
                 break;
 
             default:

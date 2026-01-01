@@ -58,6 +58,16 @@ async def lifespan(app: FastAPI):
     redis_subscriber = RedisSubscriber(redis_url=REDIS_URL)
     redis_subscriber.add_callback(state_manager.handle_redis_event)
 
+    # Callback pour visualisation Message Bus (particules animées)
+    async def broadcast_redis_to_frontend(event):
+        """Forward les événements Redis au frontend pour visualisation"""
+        await ws_manager.broadcast_redis_event(
+            event_type=event.type,
+            node=event.node,
+            data=event.data
+        )
+    redis_subscriber.add_callback(broadcast_redis_to_frontend)
+
     # Tenter connexion Redis (non bloquant si echec)
     if await redis_subscriber.start():
         logger.info("Redis connecte - mode temps reel actif")

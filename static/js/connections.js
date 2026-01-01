@@ -9,12 +9,16 @@ class ConnectionRenderer {
         this.lines = new Map(); // connectionId -> line
         this.particles = []; // Active message particles
         this.particlePool = []; // Reusable particles
-        this.maxParticles = 100;
+        this.maxParticles = 150;
         this.coreId = null;
+        this.machineIds = []; // All machine IDs for inter-connections
+        this.activeLines = new Map(); // Lines currently being animated
     }
 
     createConnection(fromId, toId, options = {}) {
-        const connectionId = `${fromId}-${toId}`;
+        // Create bidirectional key (sorted)
+        const ids = [fromId, toId].sort();
+        const connectionId = `${ids[0]}-${ids[1]}`;
 
         if (this.lines.has(connectionId)) {
             return this.lines.get(connectionId);
@@ -33,41 +37,102 @@ class ConnectionRenderer {
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
         const color = options.color || 0x00d4aa;
-        const dashed = options.dashed || false;
+        const baseOpacity = options.baseOpacity || 0.15; // Liens visibles mais subtils
 
-        let material;
-        if (dashed) {
-            material = new THREE.LineDashedMaterial({
-                color: color,
-                transparent: true,
-                opacity: 0.3,
-                dashSize: 1,
-                gapSize: 0.5,
-            });
-        } else {
-            material = new THREE.LineBasicMaterial({
-                color: color,
-                transparent: true,
-                opacity: 0.4,
-            });
-        }
+        const material = new THREE.LineBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: baseOpacity,
+            linewidth: 1,
+        });
 
         const line = new THREE.Line(geometry, material);
         line.name = connectionId;
         line.userData = {
-            fromId,
-            toId,
+            fromId: ids[0],
+            toId: ids[1],
+            originalFromId: fromId,
+            originalToId: toId,
             type: options.type || 'default',
+            baseOpacity: baseOpacity,
+            baseColor: color,
+            activeColor: options.activeColor || color,
         };
-
-        if (dashed) {
-            line.computeLineDistances();
-        }
 
         this.lines.set(connectionId, line);
         this.scene.addConnection(line);
 
         return line;
+    }
+
+    /**
+     * Trouve ou crée une connexion entre deux machines
+     */
+    getOrCreateConnection(fromId, toId) {
+        const ids = [fromId, toId].sort();
+        const connectionId = `${ids[0]}-${ids[1]}`;
+
+        if (this.lines.has(connectionId)) {
+            return this.lines.get(connectionId);
+        }
+
+        // Créer une nouvelle connexion à la volée
+        return this.createConnection(fromId, toId, {
+            color: 0x888888,
+            baseOpacity: 0.1,
+        });
+    }
+
+    /**
+     * Active visuellement une connexion (highlight)
+     */
+    activateConnection(fromId, toId, color, duration = 500) {
+        const ids = [fromId, toId].sort();
+        const connectionId = `${ids[0]}-${ids[1]}`;
+        const line = this.lines.get(connectionId);
+
+        if (!line) return;
+
+        // Highlight la ligne
+        line.material.color.setHex(color);
+        line.material.opacity = 0.8;
+
+        // Store pour animation de fade
+        this.activeLines.set(connectionId, {
+            startTime: Date.now(),
+            duration: duration,
+            originalOpacity: line.userData.baseOpacity,
+            originalColor: line.userData.baseColor,
+        });
+    }
+
+    /**
+     * Met à jour les animations des lignes actives
+     */
+    updateActiveLines() {
+        const now = Date.now();
+
+        this.activeLines.forEach((data, connectionId) => {
+            const line = this.lines.get(connectionId);
+            if (!line) {
+                this.activeLines.delete(connectionId);
+                return;
+            }
+
+            const elapsed = now - data.startTime;
+            const progress = Math.min(elapsed / data.duration, 1);
+
+            if (progress >= 1) {
+                // Reset to original state
+                line.material.opacity = data.originalOpacity;
+                line.material.color.setHex(data.originalColor);
+                this.activeLines.delete(connectionId);
+            } else {
+                // Fade out
+                const opacity = 0.8 - (0.8 - data.originalOpacity) * progress;
+                line.material.opacity = opacity;
+            }
+        });
     }
 
     updateConnection(connectionId) {
@@ -129,19 +194,51 @@ class ConnectionRenderer {
         if (!coreNode) return;
 
         this.coreId = coreNode.node_id;
+        this.machineIds = machines.map(m => m.node_id);
 
-        machines.forEach(machine => {
-            if (machine.node_id === coreNode.node_id) return;
+        // Créer toutes les connexions possibles
+        for (let i = 0; i < machines.length; i++) {
+            for (let j = i + 1; j < machines.length; j++) {
+                const m1 = machines[i];
+                const m2 = machines[j];
 
-            const isNetwork = machine.machine_type === 'network';
-            const isForge = machine.machine_type === 'forge';
+                // Déterminer la couleur et l'opacité selon les types
+                let color = 0x444466; // Couleur par défaut (subtile)
+                let baseOpacity = 0.08; // Très subtil par défaut
 
-            this.createConnection(machine.node_id, coreNode.node_id, {
-                dashed: isNetwork,
-                color: isForge ? 0xaa44ff : (isNetwork ? 0x4488ff : 0x00d4aa),
-                type: machine.machine_type,
-            });
-        });
+                // Core connections (plus visibles)
+                if (m1.machine_type === 'core' || m2.machine_type === 'core') {
+                    const other = m1.machine_type === 'core' ? m2 : m1;
+                    if (other.machine_type === 'forge') {
+                        color = 0xaa44ff; // Violet pour Forge
+                        baseOpacity = 0.25;
+                    } else if (other.machine_type === 'heart') {
+                        color = 0x00d4aa; // Cyan pour Hearts
+                        baseOpacity = 0.2;
+                    } else if (other.machine_type === 'network') {
+                        color = 0x4488ff; // Bleu pour Network
+                        baseOpacity = 0.12;
+                    }
+                }
+                // Heart to Heart (communication inter-machines)
+                else if (m1.machine_type === 'heart' && m2.machine_type === 'heart') {
+                    color = 0x00ff88;
+                    baseOpacity = 0.06;
+                }
+                // Forge to Heart
+                else if ((m1.machine_type === 'forge' && m2.machine_type === 'heart') ||
+                         (m1.machine_type === 'heart' && m2.machine_type === 'forge')) {
+                    color = 0xaa88ff;
+                    baseOpacity = 0.1;
+                }
+
+                this.createConnection(m1.node_id, m2.node_id, {
+                    color: color,
+                    baseOpacity: baseOpacity,
+                    type: `${m1.machine_type}-${m2.machine_type}`,
+                });
+            }
+        }
 
         // Start message simulation
         this._startMessageSimulation();
@@ -212,35 +309,26 @@ class ConnectionRenderer {
 
         particle.fromPos = fromMesh.position.clone();
         particle.toPos = toMesh.position.clone();
+        particle.fromId = fromId;
+        particle.toId = toId;
         particle.progress = 0;
         particle.speed = config.speed;
         particle.type = messageType;
         particle.mesh.position.copy(particle.fromPos);
 
+        // Activer visuellement la connexion
+        this.activateConnection(fromId, toId, config.color, 800);
+
         this.particles.push(particle);
-    }
-
-    /**
-     * Broadcast un message à toutes les machines depuis Core
-     */
-    broadcastMessage(messageType = 'broadcast') {
-        if (!this.coreId) return;
-
-        this.lines.forEach((line, connectionId) => {
-            const { fromId, toId } = line.userData;
-            // Broadcast from Core to all
-            if (fromId !== this.coreId && toId === this.coreId) {
-                setTimeout(() => {
-                    this.sendMessage(this.coreId, fromId, messageType);
-                }, Math.random() * 200);
-            }
-        });
     }
 
     /**
      * Met à jour les particules (appelé dans la boucle d'animation)
      */
     updateParticles(deltaTime) {
+        // Update active line animations (fade out)
+        this.updateActiveLines();
+
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const particle = this.particles[i];
 
@@ -263,12 +351,12 @@ class ConnectionRenderer {
                 );
 
                 // Add slight wave motion
-                const wave = Math.sin(particle.progress * Math.PI * 3) * 0.5;
+                const wave = Math.sin(particle.progress * Math.PI * 3) * 0.8;
                 particle.mesh.position.y += wave;
 
                 // Pulse size
-                const pulse = 1 + Math.sin(particle.progress * Math.PI * 6) * 0.2;
-                const baseSize = CONFIG.MESSAGE_TYPES[particle.type]?.size || 0.3;
+                const pulse = 1 + Math.sin(particle.progress * Math.PI * 6) * 0.3;
+                const baseSize = CONFIG.MESSAGE_TYPES[particle.type]?.size || 0.9;
                 particle.mesh.scale.setScalar(baseSize * pulse);
             }
         }
@@ -317,113 +405,185 @@ class ConnectionRenderer {
      * Simule le trafic du Message Bus
      */
     _startMessageSimulation() {
-        // Heartbeats réguliers (toutes les 2-4 secondes par machine)
+        // Heartbeats réguliers
         this._simulateHeartbeats();
 
-        // Messages aléatoires
+        // Messages aléatoires sur toutes les connexions
         this._simulateRandomMessages();
+
+        // Communication inter-machines
+        this._simulateInterMachineComm();
     }
 
     _simulateHeartbeats() {
         const heartbeatInterval = () => {
-            if (!this.coreId) return;
+            if (!this.coreId || this.machineIds.length === 0) return;
 
-            // Each Heart sends a heartbeat
-            this.lines.forEach((line) => {
-                const { fromId, toId } = line.userData;
-                if (line.userData.type === 'heart' && toId === this.coreId) {
-                    // Random delay to stagger heartbeats
-                    setTimeout(() => {
-                        this.sendMessage(fromId, this.coreId, 'heartbeat');
-                    }, Math.random() * 2000);
-                }
+            // Chaque machine envoie un heartbeat au Core
+            this.machineIds.forEach(machineId => {
+                if (machineId === this.coreId) return;
+
+                // Random delay to stagger heartbeats
+                setTimeout(() => {
+                    this.sendMessage(machineId, this.coreId, 'heartbeat');
+                }, Math.random() * 3000);
             });
 
             // Schedule next round
-            setTimeout(heartbeatInterval, 3000 + Math.random() * 2000);
+            setTimeout(heartbeatInterval, 4000 + Math.random() * 2000);
         };
 
         setTimeout(heartbeatInterval, 1000);
     }
 
     _simulateRandomMessages() {
-        const messageTypes = ['ping', 'sync', 'command', 'status', 'skill_event'];
-
         const sendRandom = () => {
-            if (!this.coreId) return;
+            if (!this.coreId || this.machineIds.length < 2) return;
 
             const connections = Array.from(this.lines.values());
             if (connections.length === 0) return;
 
-            // Random connection
-            const conn = connections[Math.floor(Math.random() * connections.length)];
+            // Random connection (pas réseau)
+            const validConns = connections.filter(c => !c.userData.type.includes('network'));
+            if (validConns.length === 0) return;
+
+            const conn = validConns[Math.floor(Math.random() * validConns.length)];
             const { fromId, toId } = conn.userData;
 
-            // Random message type
-            const msgType = messageTypes[Math.floor(Math.random() * messageTypes.length)];
+            // Déterminer le type de message selon la connexion
+            const connType = conn.userData.type;
+            let msgType, direction;
 
-            // Random direction (mostly Core → Hearts for commands)
-            if (msgType === 'command' || msgType === 'sync') {
-                this.sendMessage(this.coreId, fromId, msgType);
-            } else if (msgType === 'status' || msgType === 'skill_event') {
-                this.sendMessage(fromId, this.coreId, msgType);
+            if (connType.includes('forge')) {
+                // Communication Forge
+                msgType = 'forge';
+                direction = Math.random() > 0.5 ? [this.coreId, fromId] : [fromId, this.coreId];
+            } else if (connType.includes('core')) {
+                // Communication avec Core
+                const msgTypes = ['command', 'sync', 'status', 'skill_event', 'ping'];
+                msgType = msgTypes[Math.floor(Math.random() * msgTypes.length)];
+
+                if (msgType === 'command' || msgType === 'sync') {
+                    direction = [this.coreId, toId === this.coreId ? fromId : toId];
+                } else {
+                    direction = [toId === this.coreId ? fromId : toId, this.coreId];
+                }
             } else {
-                // Ping can go either way
-                if (Math.random() > 0.5) {
-                    this.sendMessage(this.coreId, fromId, 'ping');
-                    setTimeout(() => {
-                        this.sendMessage(fromId, this.coreId, 'pong');
-                    }, 300);
-                }
+                // Communication Heart to Heart
+                msgType = Math.random() > 0.5 ? 'sync' : 'status';
+                direction = Math.random() > 0.5 ? [fromId, toId] : [toId, fromId];
             }
 
-            // Occasional Forge communication
-            if (Math.random() < 0.1) {
-                const forgeConn = connections.find(c => c.userData.type === 'forge');
-                if (forgeConn) {
-                    this.sendMessage(this.coreId, forgeConn.userData.fromId, 'forge');
-                    setTimeout(() => {
-                        this.sendMessage(forgeConn.userData.fromId, this.coreId, 'forge');
-                    }, 500);
-                }
-            }
+            this.sendMessage(direction[0], direction[1], msgType);
 
-            // Occasional broadcast
-            if (Math.random() < 0.05) {
-                this.broadcastMessage('broadcast');
+            // Réponse pong si ping
+            if (msgType === 'ping') {
+                setTimeout(() => {
+                    this.sendMessage(direction[1], direction[0], 'pong');
+                }, 300);
             }
 
             // Schedule next random message
-            setTimeout(sendRandom, 500 + Math.random() * 1500);
+            setTimeout(sendRandom, 400 + Math.random() * 1200);
         };
 
         setTimeout(sendRandom, 2000);
     }
 
+    _simulateInterMachineComm() {
+        // Communication occasionnelle entre Hearts (sync, status)
+        const sendInterMachine = () => {
+            if (this.machineIds.length < 3) return;
+
+            // Trouver deux machines non-Core différentes
+            const nonCore = this.machineIds.filter(id => id !== this.coreId);
+            if (nonCore.length < 2) return;
+
+            const from = nonCore[Math.floor(Math.random() * nonCore.length)];
+            let to = nonCore[Math.floor(Math.random() * nonCore.length)];
+            while (to === from) {
+                to = nonCore[Math.floor(Math.random() * nonCore.length)];
+            }
+
+            // Message status ou sync entre machines
+            const msgType = Math.random() > 0.7 ? 'sync' : 'status';
+            this.sendMessage(from, to, msgType);
+
+            // Schedule next
+            setTimeout(sendInterMachine, 3000 + Math.random() * 4000);
+        };
+
+        setTimeout(sendInterMachine, 5000);
+    }
+
+    /**
+     * Broadcast - envoie un message de Core à toutes les machines
+     */
+    broadcastMessage(messageType = 'broadcast') {
+        if (!this.coreId) return;
+
+        this.machineIds.forEach(machineId => {
+            if (machineId === this.coreId) return;
+
+            setTimeout(() => {
+                this.sendMessage(this.coreId, machineId, messageType);
+            }, Math.random() * 300);
+        });
+    }
+
     /**
      * Envoie un vrai message depuis un événement Redis
+     *
+     * Event types from MESSAGE_BUS.md:
+     * - Heart → Core: heartbeat, pong, sync_complete, skill_removed, skill_restarted, status_response
+     * - Forge → Core: forge_online, pong, test_started, test_complete
      */
     handleRedisEvent(event) {
-        const { type, node, target } = event;
+        // event structure: { type: "redis_event", event_type: "heartbeat", node: "...", data: {...} }
+        const eventType = event.event_type || event.type;
+        const node = event.node;
+        const data = event.data || {};
 
-        // Map event type to message type
-        let msgType = 'status';
-        if (type === 'heartbeat') msgType = 'heartbeat';
-        else if (type === 'ping' || type === 'pong') msgType = type;
-        else if (type === 'sync_complete') msgType = 'sync';
-        else if (type === 'skill_started' || type === 'skill_stopped') msgType = 'skill_event';
-        else if (type === 'error') msgType = 'error';
-        else if (type?.includes('forge')) msgType = 'forge';
+        // Map Redis event type to visual message type
+        const typeMapping = {
+            // Heart events
+            'heartbeat': 'heartbeat',
+            'pong': 'pong',
+            'sync_complete': 'sync',
+            'skill_removed': 'skill_event',
+            'skill_restarted': 'skill_event',
+            'status_response': 'status',
+            // Forge events
+            'forge_online': 'forge',
+            'test_started': 'forge',
+            'test_complete': 'forge',
+            // Other
+            'error': 'error',
+        };
 
-        // Determine source and target
-        const sourceId = node || target;
+        const msgType = typeMapping[eventType] || 'status';
+
+        // Find the node's mesh - try with full node_id or hostname
+        let sourceId = node;
         if (sourceId && this.coreId) {
-            // Find connection
+            // Try to find matching machine
             const mesh = machineRenderer?.getMesh(sourceId);
             if (mesh) {
                 this.sendMessage(sourceId, this.coreId, msgType);
+            } else {
+                // Try to find by partial match (hostname without suffix)
+                const hostname = sourceId.split('-')[0];
+                const allMeshes = machineRenderer?.getAllMeshes() || new Map();
+                for (const [id, m] of allMeshes) {
+                    if (id.startsWith(hostname) || id.includes(hostname)) {
+                        this.sendMessage(id, this.coreId, msgType);
+                        break;
+                    }
+                }
             }
         }
+
+        console.log('Redis event:', eventType, node, '→', msgType);
     }
 }
 
