@@ -7,6 +7,8 @@ class MachineRenderer {
         this.scene = scene;
         this.meshes = new Map(); // nodeId -> mesh
         this.specialMeshes = new Map(); // nodeId -> {satellites, particles, etc.}
+        this.metricsRings = new Map(); // nodeId -> {cpuRing, ramRing, cpuArc, ramArc}
+        this.metricsVisible = true;
     }
 
     createMachine(machine) {
@@ -279,6 +281,11 @@ class MachineRenderer {
                 opacity: 0.5,
             });
             group.add(new THREE.Mesh(wireGeom, wireMat));
+
+            // Ajouter anneaux de métriques si Heart
+            if (machine.has_heart) {
+                this._addMetricsRings(group, machine.node_id, baseSize);
+            }
         } else if (type === 'proxy_target') {
             // Wireframe pointillé pour proxy_target
             const wireGeom = new THREE.BoxGeometry(baseSize * 0.95, baseSize * 0.95, baseSize * 0.95);
@@ -336,6 +343,158 @@ class MachineRenderer {
         const glow = new THREE.Mesh(glowGeometry, glowMaterial);
         glow.scale.multiplyScalar(1.3);
         mesh.add(glow);
+    }
+
+    /**
+     * Ajoute des anneaux de métriques (CPU, RAM) autour d'une machine Heart
+     */
+    _addMetricsRings(group, nodeId, baseSize) {
+        const ringRadius = baseSize * 0.85;
+        const tubeRadius = 0.12;
+
+        // Groupe conteneur pour les anneaux
+        const metricsGroup = new THREE.Group();
+        metricsGroup.name = 'metrics';
+
+        // === Anneau CPU (horizontal, dessus) ===
+        // Background ring (gris)
+        const cpuBgGeom = new THREE.TorusGeometry(ringRadius, tubeRadius, 8, 32);
+        const cpuBgMat = new THREE.MeshBasicMaterial({
+            color: 0x333344,
+            transparent: true,
+            opacity: 0.4,
+        });
+        const cpuBg = new THREE.Mesh(cpuBgGeom, cpuBgMat);
+        cpuBg.rotation.x = Math.PI / 2;
+        cpuBg.position.y = baseSize * 0.7;
+        metricsGroup.add(cpuBg);
+
+        // Arc CPU (cyan) - initialement vide
+        const cpuArc = this._createArc(ringRadius, tubeRadius, 0, 0x00ffff);
+        cpuArc.rotation.x = Math.PI / 2;
+        cpuArc.position.y = baseSize * 0.7;
+        metricsGroup.add(cpuArc);
+
+        // === Anneau RAM (vertical, côté) ===
+        // Background ring (gris)
+        const ramBgGeom = new THREE.TorusGeometry(ringRadius * 0.9, tubeRadius, 8, 32);
+        const ramBgMat = new THREE.MeshBasicMaterial({
+            color: 0x333344,
+            transparent: true,
+            opacity: 0.4,
+        });
+        const ramBg = new THREE.Mesh(ramBgGeom, ramBgMat);
+        ramBg.rotation.y = Math.PI / 2;
+        metricsGroup.add(ramBg);
+
+        // Arc RAM (vert) - initialement vide
+        const ramArc = this._createArc(ringRadius * 0.9, tubeRadius, 0, 0x00ff88);
+        ramArc.rotation.y = Math.PI / 2;
+        metricsGroup.add(ramArc);
+
+        group.add(metricsGroup);
+
+        // Stocker les références
+        this.metricsRings.set(nodeId, {
+            group: metricsGroup,
+            cpuArc,
+            ramArc,
+            cpuBg,
+            ramBg,
+            ringRadius,
+            tubeRadius,
+        });
+    }
+
+    /**
+     * Crée un arc de cercle (portion de torus)
+     */
+    _createArc(radius, tubeRadius, percent, color) {
+        // Si percent est 0, créer un arc minimal invisible
+        const angle = Math.max(0.01, (percent / 100) * Math.PI * 2);
+
+        // Utiliser un tube le long d'une courbe
+        const curve = new THREE.EllipseCurve(
+            0, 0,
+            radius, radius,
+            0, angle,
+            false,
+            0
+        );
+
+        const points = curve.getPoints(32);
+        const path = new THREE.CatmullRomCurve3(
+            points.map(p => new THREE.Vector3(p.x, 0, p.y))
+        );
+
+        const geometry = new THREE.TubeGeometry(path, 32, tubeRadius, 8, false);
+        const material = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: percent > 0 ? 0.9 : 0,
+        });
+
+        return new THREE.Mesh(geometry, material);
+    }
+
+    /**
+     * Met à jour un arc de métriques
+     */
+    _updateArc(oldArc, radius, tubeRadius, percent, color, parent, rotation, position) {
+        // Supprimer l'ancien arc
+        parent.remove(oldArc);
+        oldArc.geometry.dispose();
+        oldArc.material.dispose();
+
+        // Créer le nouvel arc
+        const newArc = this._createArc(radius, tubeRadius, percent, color);
+        newArc.rotation.copy(rotation);
+        newArc.position.copy(position);
+        parent.add(newArc);
+
+        return newArc;
+    }
+
+    /**
+     * Met à jour les métriques d'une machine
+     */
+    updateMetrics(nodeId, metrics) {
+        const rings = this.metricsRings.get(nodeId);
+        if (!rings || !this.metricsVisible) return;
+
+        const { group, cpuArc, ramArc, ringRadius, tubeRadius } = rings;
+
+        const cpuPercent = metrics.cpu_percent || 0;
+        const ramPercent = metrics.ram_percent || 0;
+
+        // Mettre à jour l'arc CPU
+        if (cpuPercent !== cpuArc.userData.percent) {
+            const rotation = cpuArc.rotation.clone();
+            const position = cpuArc.position.clone();
+            rings.cpuArc = this._updateArc(cpuArc, ringRadius, tubeRadius, cpuPercent, 0x00ffff, group, rotation, position);
+            rings.cpuArc.userData.percent = cpuPercent;
+        }
+
+        // Mettre à jour l'arc RAM
+        if (ramPercent !== ramArc.userData.percent) {
+            const rotation = ramArc.rotation.clone();
+            const position = ramArc.position.clone();
+            rings.ramArc = this._updateArc(ramArc, ringRadius * 0.9, tubeRadius, ramPercent, 0x00ff88, group, rotation, position);
+            rings.ramArc.userData.percent = ramPercent;
+        }
+    }
+
+    /**
+     * Toggle la visibilité des métriques
+     */
+    toggleMetrics() {
+        this.metricsVisible = !this.metricsVisible;
+
+        this.metricsRings.forEach((rings) => {
+            rings.group.visible = this.metricsVisible;
+        });
+
+        return this.metricsVisible;
     }
 
     updateMachine(nodeId, updates) {

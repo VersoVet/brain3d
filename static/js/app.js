@@ -89,9 +89,14 @@ class Brain3DApp {
             console.log('Creating machines:', state.machines.map(m => m.hostname));
             machineRenderer.createAllMachines(state.machines);
 
-            // Setup animations based on status
+            // Setup animations and initial metrics based on status
             state.machines.forEach(machine => {
                 animationManager.updateFromStatus(machine.node_id, machine.status);
+
+                // Apply initial metrics if available
+                if (machine.metrics && machine.has_heart) {
+                    machineRenderer.updateMetrics(machine.node_id, machine.metrics);
+                }
             });
 
             // Create connections
@@ -134,6 +139,9 @@ class Brain3DApp {
             const machine = this.state.machines.find(m => m.node_id === node_id);
             if (machine) {
                 machine.metrics = metrics;
+
+                // Update 3D metrics rings
+                machineRenderer?.updateMetrics(node_id, metrics);
 
                 // If this machine is selected, update info panel
                 if (navigation?.selectedMachine === node_id) {

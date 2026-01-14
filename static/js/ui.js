@@ -35,8 +35,8 @@ class UIManager {
 
         // Toggle metrics
         document.getElementById('btn-toggle-metrics')?.addEventListener('click', (e) => {
-            // TODO: Toggle metrics display
-            e.target.classList.toggle('active');
+            const visible = machineRenderer?.toggleMetrics();
+            e.target.classList.toggle('active', visible);
         });
 
         // Refresh
