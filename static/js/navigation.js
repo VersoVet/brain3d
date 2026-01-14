@@ -215,12 +215,20 @@ class NavigationManager {
         return null;
     }
 
+    _getMainMesh(mesh) {
+        // Retourne le mesh principal (pour accéder au material)
+        return mesh.userData?.mainMesh || mesh;
+    }
+
     selectMachine(nodeId) {
         // Deselect previous
         if (this.selectedMachine) {
             const prevMesh = machineRenderer?.getMesh(this.selectedMachine);
             if (prevMesh) {
-                prevMesh.material.emissiveIntensity = 0.2;
+                const prevMainMesh = this._getMainMesh(prevMesh);
+                if (prevMainMesh.material) {
+                    prevMainMesh.material.emissiveIntensity = 0.2;
+                }
             }
         }
 
@@ -229,7 +237,10 @@ class NavigationManager {
         // Highlight selected
         const mesh = machineRenderer?.getMesh(nodeId);
         if (mesh) {
-            mesh.material.emissiveIntensity = 0.5;
+            const mainMesh = this._getMainMesh(mesh);
+            if (mainMesh.material) {
+                mainMesh.material.emissiveIntensity = 0.5;
+            }
 
             // Show info panel
             ui?.showMachineInfo(mesh.userData.machineData);
@@ -243,7 +254,10 @@ class NavigationManager {
         if (this.selectedMachine) {
             const mesh = machineRenderer?.getMesh(this.selectedMachine);
             if (mesh) {
-                mesh.material.emissiveIntensity = 0.2;
+                const mainMesh = this._getMainMesh(mesh);
+                if (mainMesh.material) {
+                    mainMesh.material.emissiveIntensity = 0.2;
+                }
             }
         }
 

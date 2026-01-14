@@ -14,9 +14,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .config import PORT, DEV_PORT, REDIS_URL, CORE_URL, Status
+from .config import PORT, DEV_PORT, REDIS_URL, CORE_URL, NETWORK_INVENTORY_URL, Status
 from .redis_client import RedisSubscriber, RedisHealthCheck
-from .core_client import CoreAPIClient
+from .data_client import DataClient
 from .websocket_manager import WebSocketManager
 from .state_manager import StateManager
 
@@ -34,7 +34,7 @@ STATIC_DIR = BASE_DIR / "static"
 
 # Composants globaux
 redis_subscriber: RedisSubscriber = None
-core_client: CoreAPIClient = None
+data_client: DataClient = None
 ws_manager: WebSocketManager = None
 state_manager: StateManager = None
 
@@ -42,14 +42,16 @@ state_manager: StateManager = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Gestion du cycle de vie de l'application"""
-    global redis_subscriber, core_client, ws_manager, state_manager
+    global redis_subscriber, data_client, ws_manager, state_manager
 
     logger.info("Demarrage Brain3D...")
+    logger.info(f"  Core: {CORE_URL}")
+    logger.info(f"  network-inventory: {NETWORK_INVENTORY_URL}")
 
     # Initialiser les composants
-    core_client = CoreAPIClient()  # Utilise le SDK avec config interne
+    data_client = DataClient(core_url=CORE_URL, network_url=NETWORK_INVENTORY_URL)
     ws_manager = WebSocketManager()
-    state_manager = StateManager(core_client, ws_manager)
+    state_manager = StateManager(data_client, ws_manager)
 
     # Demarrer WebSocket manager
     await ws_manager.start()
@@ -87,6 +89,7 @@ async def lifespan(app: FastAPI):
     logger.info("Arret Brain3D...")
     await redis_subscriber.stop()
     await ws_manager.stop()
+    await data_client.close()
     logger.info("Brain3D arrete")
 
 

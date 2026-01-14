@@ -124,6 +124,9 @@ class MachineRenderer {
             wireMesh
         });
 
+        // Stocker référence au mesh principal pour animations
+        group.userData.mainMesh = coreMesh;
+
         return group;
     }
 
@@ -214,6 +217,9 @@ class MachineRenderer {
             ring2
         });
 
+        // Stocker référence au mesh principal pour animations
+        group.userData.mainMesh = knotMesh;
+
         return group;
     }
 
@@ -259,6 +265,9 @@ class MachineRenderer {
 
         const mesh = new THREE.Mesh(geometry, material);
         group.add(mesh);
+
+        // Stocker référence au mesh principal pour animations
+        group.userData.mainMesh = mesh;
 
         // Wireframe pour les cubes (heart et proxy_target)
         if (type === 'heart') {

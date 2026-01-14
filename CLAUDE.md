@@ -91,12 +91,6 @@ python -m src.main
 - OnyxDendrite: 10.0.0.13 (pont reseau)
 - Ports 8000-9999 forwardes via iptables
 
-## Probleme Actuel
-
-Seule OnyxSoma (type=core) s'affiche dans la vue 3D.
-L'API retourne 8 machines mais seulement 1 est rendue.
-Verifier le parsing de `machine_type` dans le frontend.
-
 ## Fichiers Cles a Editer
 
 - `src/core_client.py` - Communication avec OnyxCore

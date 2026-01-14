@@ -47,25 +47,39 @@ class AnimationManager {
         requestAnimationFrame(() => this._animate());
     }
 
+    _getMainMesh(mesh) {
+        // Retourne le mesh principal (pour accéder au material)
+        return mesh.userData?.mainMesh || mesh;
+    }
+
     _pulseSlow(mesh) {
         const scale = 1 + Math.sin(this.time * CONFIG.ANIMATIONS.pulseSlowSpeed) * 0.05;
         mesh.scale.setScalar(scale);
 
-        const intensity = 0.2 + Math.sin(this.time * CONFIG.ANIMATIONS.pulseSlowSpeed) * 0.1;
-        mesh.material.emissiveIntensity = intensity;
+        const mainMesh = this._getMainMesh(mesh);
+        if (mainMesh.material) {
+            const intensity = 0.2 + Math.sin(this.time * CONFIG.ANIMATIONS.pulseSlowSpeed) * 0.1;
+            mainMesh.material.emissiveIntensity = intensity;
+        }
     }
 
     _pulseFast(mesh) {
         const scale = 1 + Math.sin(this.time * CONFIG.ANIMATIONS.pulseFastSpeed) * 0.1;
         mesh.scale.setScalar(scale);
 
-        const intensity = 0.3 + Math.sin(this.time * CONFIG.ANIMATIONS.pulseFastSpeed) * 0.2;
-        mesh.material.emissiveIntensity = intensity;
+        const mainMesh = this._getMainMesh(mesh);
+        if (mainMesh.material) {
+            const intensity = 0.3 + Math.sin(this.time * CONFIG.ANIMATIONS.pulseFastSpeed) * 0.2;
+            mainMesh.material.emissiveIntensity = intensity;
+        }
     }
 
     _blink(mesh) {
-        const opacity = 0.5 + Math.abs(Math.sin(this.time * CONFIG.ANIMATIONS.blinkSpeed)) * 0.5;
-        mesh.material.opacity = opacity;
+        const mainMesh = this._getMainMesh(mesh);
+        if (mainMesh.material) {
+            const opacity = 0.5 + Math.abs(Math.sin(this.time * CONFIG.ANIMATIONS.blinkSpeed)) * 0.5;
+            mainMesh.material.opacity = opacity;
+        }
     }
 
     setAnimation(nodeId, type) {
@@ -75,8 +89,11 @@ class AnimationManager {
             const mesh = machineRenderer?.getMesh(nodeId);
             if (mesh) {
                 mesh.scale.setScalar(1);
-                mesh.material.emissiveIntensity = 0.2;
-                mesh.material.opacity = 1;
+                const mainMesh = this._getMainMesh(mesh);
+                if (mainMesh.material) {
+                    mainMesh.material.emissiveIntensity = 0.2;
+                    mainMesh.material.opacity = 1;
+                }
             }
         } else {
             this.animations.set(nodeId, { type });
