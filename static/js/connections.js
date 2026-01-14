@@ -240,8 +240,7 @@ class ConnectionRenderer {
             }
         }
 
-        // Start message simulation
-        this._startMessageSimulation();
+        // Messages réels uniquement via Redis events (handleRedisEvent)
     }
 
     // === MESSAGE PARTICLES ===
@@ -399,137 +398,7 @@ class ConnectionRenderer {
         animateFlash();
     }
 
-    // === MESSAGE SIMULATION ===
-
-    /**
-     * Simule le trafic du Message Bus
-     */
-    _startMessageSimulation() {
-        // Heartbeats réguliers
-        this._simulateHeartbeats();
-
-        // Messages aléatoires sur toutes les connexions
-        this._simulateRandomMessages();
-
-        // Communication inter-machines
-        this._simulateInterMachineComm();
-    }
-
-    _simulateHeartbeats() {
-        const heartbeatInterval = () => {
-            if (!this.coreId || this.machineIds.length === 0) return;
-
-            // Chaque machine envoie un heartbeat au Core
-            this.machineIds.forEach(machineId => {
-                if (machineId === this.coreId) return;
-
-                // Random delay to stagger heartbeats
-                setTimeout(() => {
-                    this.sendMessage(machineId, this.coreId, 'heartbeat');
-                }, Math.random() * 3000);
-            });
-
-            // Schedule next round
-            setTimeout(heartbeatInterval, 4000 + Math.random() * 2000);
-        };
-
-        setTimeout(heartbeatInterval, 1000);
-    }
-
-    _simulateRandomMessages() {
-        const sendRandom = () => {
-            if (!this.coreId || this.machineIds.length < 2) return;
-
-            const connections = Array.from(this.lines.values());
-            if (connections.length === 0) return;
-
-            // Random connection (pas réseau)
-            const validConns = connections.filter(c => !c.userData.type.includes('network'));
-            if (validConns.length === 0) return;
-
-            const conn = validConns[Math.floor(Math.random() * validConns.length)];
-            const { fromId, toId } = conn.userData;
-
-            // Déterminer le type de message selon la connexion
-            const connType = conn.userData.type;
-            let msgType, direction;
-
-            if (connType.includes('forge')) {
-                // Communication Forge
-                msgType = 'forge';
-                direction = Math.random() > 0.5 ? [this.coreId, fromId] : [fromId, this.coreId];
-            } else if (connType.includes('core')) {
-                // Communication avec Core
-                const msgTypes = ['command', 'sync', 'status', 'skill_event', 'ping'];
-                msgType = msgTypes[Math.floor(Math.random() * msgTypes.length)];
-
-                if (msgType === 'command' || msgType === 'sync') {
-                    direction = [this.coreId, toId === this.coreId ? fromId : toId];
-                } else {
-                    direction = [toId === this.coreId ? fromId : toId, this.coreId];
-                }
-            } else {
-                // Communication Heart to Heart
-                msgType = Math.random() > 0.5 ? 'sync' : 'status';
-                direction = Math.random() > 0.5 ? [fromId, toId] : [toId, fromId];
-            }
-
-            this.sendMessage(direction[0], direction[1], msgType);
-
-            // Réponse pong si ping
-            if (msgType === 'ping') {
-                setTimeout(() => {
-                    this.sendMessage(direction[1], direction[0], 'pong');
-                }, 300);
-            }
-
-            // Schedule next random message
-            setTimeout(sendRandom, 400 + Math.random() * 1200);
-        };
-
-        setTimeout(sendRandom, 2000);
-    }
-
-    _simulateInterMachineComm() {
-        // Communication occasionnelle entre Hearts (sync, status)
-        const sendInterMachine = () => {
-            if (this.machineIds.length < 3) return;
-
-            // Trouver deux machines non-Core différentes
-            const nonCore = this.machineIds.filter(id => id !== this.coreId);
-            if (nonCore.length < 2) return;
-
-            const from = nonCore[Math.floor(Math.random() * nonCore.length)];
-            let to = nonCore[Math.floor(Math.random() * nonCore.length)];
-            while (to === from) {
-                to = nonCore[Math.floor(Math.random() * nonCore.length)];
-            }
-
-            // Message status ou sync entre machines
-            const msgType = Math.random() > 0.7 ? 'sync' : 'status';
-            this.sendMessage(from, to, msgType);
-
-            // Schedule next
-            setTimeout(sendInterMachine, 3000 + Math.random() * 4000);
-        };
-
-        setTimeout(sendInterMachine, 5000);
-    }
-
-    /**
-     * Broadcast - envoie un message de Core à toutes les machines
-     */
-    broadcastMessage(messageType = 'broadcast') {
-        if (!this.coreId) return;
-
-        this.machineIds.forEach(machineId => {
-            if (machineId === this.coreId) return;
-
-            setTimeout(() => {
-                this.sendMessage(this.coreId, machineId, messageType);
-            }, Math.random() * 300);
-        });
-    }
+    // === REAL REDIS EVENTS ONLY ===
 
     /**
      * Envoie un vrai message depuis un événement Redis

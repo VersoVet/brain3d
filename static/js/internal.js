@@ -47,101 +47,83 @@ class InternalViewRenderer {
         this.scene.machinesGroup.visible = false;
         this.scene.connectionsGroup.visible = false;
 
-        // Determine view type based on machine type
-        if (machine.machine_type === 'core') {
-            this._renderCoreInternal(machine, state);
-        } else {
-            this._renderHeartInternal(machine, state);
-        }
+        // Render unified Heart view (same for all types)
+        this._renderHeartCentral(machine, state);
 
         console.log('Internal view shown for:', machine.hostname);
     }
 
     /**
-     * Vue interne du Core: toutes les aires avec leurs skills
+     * Vue interne unifiée: Heart (cube) au centre, aires autour, skills par aire
      */
-    _renderCoreInternal(machine, state) {
+    _renderHeartCentral(machine, state) {
         const group = this.internalGroup;
         const areas = state.areas || [];
         const skills = state.skills || [];
+        const type = machine.machine_type || 'heart';
 
-        // Central Core representation (cyan dodecahedron)
-        const coreGeom = new THREE.DodecahedronGeometry(4);
-        const coreMat = new THREE.MeshPhongMaterial({
-            color: 0x00d4aa,
-            emissive: 0x00d4aa,
-            emissiveIntensity: 0.3,
-            transparent: true,
-            opacity: 0.8,
-            wireframe: false,
-        });
-        const coreMesh = new THREE.Mesh(coreGeom, coreMat);
-        coreMesh.name = 'core-center';
-        coreMesh.userData = { type: 'core', nodeId: machine.node_id };
-        group.add(coreMesh);
+        // === HEART CENTRAL (CUBE) ===
+        const heartSize = 4;
+        const typeColors = {
+            core: 0x00d4aa,    // Cyan
+            forge: 0xaa44ff,   // Violet
+            heart: 0x00ff88,   // Vert
+        };
+        const heartColor = typeColors[type] || typeColors.heart;
 
-        // Add wireframe overlay
-        const wireGeom = new THREE.DodecahedronGeometry(4.1);
-        const wireMat = new THREE.MeshBasicMaterial({
-            color: 0x00ffaa,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.3,
-        });
-        const wireMesh = new THREE.Mesh(wireGeom, wireMat);
-        coreMesh.add(wireMesh);
-
-        // Heart representation (red icosahedron) - next to Core
-        const heartGeom = new THREE.IcosahedronGeometry(2);
+        // Cube central
+        const heartGeom = new THREE.BoxGeometry(heartSize, heartSize, heartSize);
         const heartMat = new THREE.MeshPhongMaterial({
-            color: 0xff3333,
-            emissive: 0xff3333,
+            color: heartColor,
+            emissive: heartColor,
             emissiveIntensity: 0.4,
             transparent: true,
             opacity: 0.9,
         });
-        const heartMesh = new THREE.Mesh(heartGeom, heartMat);
-        heartMesh.position.set(8, 0, 0); // À droite du Core
-        heartMesh.name = 'heart';
-        heartMesh.userData = { type: 'heart', nodeId: machine.node_id };
-        group.add(heartMesh);
+        this.heartMesh = new THREE.Mesh(heartGeom, heartMat);
+        this.heartMesh.name = 'heart-center';
+        this.heartMesh.userData = {
+            type: 'heart',
+            nodeId: machine.node_id,
+            hostname: machine.hostname,
+            machineType: type,
+        };
+        group.add(this.heartMesh);
 
-        // Heart glow
-        const heartGlowGeom = new THREE.IcosahedronGeometry(2.3);
-        const heartGlowMat = new THREE.MeshBasicMaterial({
-            color: 0xff0000,
-            transparent: true,
-            opacity: 0.15,
-            side: THREE.BackSide,
-        });
-        heartMesh.add(new THREE.Mesh(heartGlowGeom, heartGlowMat));
-
-        // Label for Heart
-        this._addLabel(heartMesh, 'Heart', 3);
-
-        // Connection Core <-> Heart
-        const coreHeartLine = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, 0, 0),
-            new THREE.Vector3(8, 0, 0),
-        ]);
-        const coreHeartMat = new THREE.LineBasicMaterial({
-            color: 0xff6666,
+        // Wireframe
+        const wireGeom = new THREE.BoxGeometry(heartSize * 1.05, heartSize * 1.05, heartSize * 1.05);
+        const wireMat = new THREE.MeshBasicMaterial({
+            color: heartColor,
+            wireframe: true,
             transparent: true,
             opacity: 0.5,
         });
-        group.add(new THREE.Line(coreHeartLine, coreHeartMat));
+        this.heartMesh.add(new THREE.Mesh(wireGeom, wireMat));
 
-        // Place areas around the core in a circle
-        const areaRadius = 20;
-        const areaCount = areas.length || 1;
+        // Glow
+        const glowGeom = new THREE.BoxGeometry(heartSize * 1.4, heartSize * 1.4, heartSize * 1.4);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: heartColor,
+            transparent: true,
+            opacity: 0.1,
+            side: THREE.BackSide,
+        });
+        this.heartMesh.add(new THREE.Mesh(glowGeom, glowMat));
 
-        areas.forEach((area, index) => {
-            const angle = (index / areaCount) * Math.PI * 2;
-            const x = Math.cos(angle) * areaRadius;
-            const z = Math.sin(angle) * areaRadius;
+        // Label hostname
+        this._addLabel(this.heartMesh, machine.hostname, 4);
 
-            // Create area sphere
-            const areaGeom = new THREE.SphereGeometry(3, 32, 32);
+        // === AIRES EN CERCLE ===
+        const areaRadius = 18;
+        const displayAreas = areas.length > 0 ? areas : [{ id: 'default', name: 'Skills' }];
+
+        displayAreas.forEach((area, index) => {
+            const angle = (index / displayAreas.length) * Math.PI * 2 - Math.PI / 2;
+            const ax = Math.cos(angle) * areaRadius;
+            const az = Math.sin(angle) * areaRadius;
+
+            // Torus pour représenter l'aire
+            const areaGeom = new THREE.TorusGeometry(2.5, 0.5, 16, 32);
             const areaColor = this._parseColor(area.color || '#00d4aa');
             const areaStatus = this._getAreaStatus(area, skills);
             const statusColor = getStatusColor(areaStatus);
@@ -149,54 +131,54 @@ class InternalViewRenderer {
             const areaMat = new THREE.MeshPhongMaterial({
                 color: statusColor,
                 emissive: statusColor,
-                emissiveIntensity: 0.2,
+                emissiveIntensity: 0.3,
                 transparent: true,
-                opacity: 0.9,
+                opacity: 0.8,
             });
 
             const areaMesh = new THREE.Mesh(areaGeom, areaMat);
-            areaMesh.position.set(x, 0, z);
+            areaMesh.position.set(ax, 0, az);
+            areaMesh.rotation.x = Math.PI / 2;
             areaMesh.name = area.id;
-            areaMesh.userData = {
-                type: 'area',
-                areaId: area.id,
-                areaName: area.name,
-                status: areaStatus,
-            };
+            areaMesh.userData = { type: 'area', areaId: area.id, areaName: area.name };
             group.add(areaMesh);
             this.areaMeshes.set(area.id, areaMesh);
 
-            // Create connection line to core
+            // Connexion Heart -> Aire
             const lineGeom = new THREE.BufferGeometry().setFromPoints([
                 new THREE.Vector3(0, 0, 0),
-                new THREE.Vector3(x, 0, z),
+                new THREE.Vector3(ax, 0, az),
             ]);
             const lineMat = new THREE.LineBasicMaterial({
-                color: 0x00d4aa,
+                color: heartColor,
                 transparent: true,
                 opacity: 0.3,
             });
-            const line = new THREE.Line(lineGeom, lineMat);
-            group.add(line);
+            group.add(new THREE.Line(lineGeom, lineMat));
 
-            // Add label
-            this._addLabel(areaMesh, area.name, 4);
+            // Label aire
+            this._addLabel(areaMesh, area.name, 3.5);
 
-            // Place skills around the area
-            const areaSkills = skills.filter(s => s.brain_area === area.id);
+            // === SKILLS AUTOUR DE L'AIRE ===
+            const areaSkills = area.id === 'default'
+                ? skills.filter(s =>
+                    s.deployed_on?.includes(machine.hostname) ||
+                    s.deployed_on?.includes(machine.node_id) ||
+                    machine.skills?.includes(s.name)
+                  )
+                : skills.filter(s => s.brain_area === area.id);
+
             const skillRadius = 6;
-            const skillCount = areaSkills.length || 1;
+            areaSkills.forEach((skill, si) => {
+                const sAngle = (si / Math.max(areaSkills.length, 1)) * Math.PI * 2;
+                const sx = ax + Math.cos(sAngle) * skillRadius;
+                const sz = az + Math.sin(sAngle) * skillRadius;
 
-            areaSkills.forEach((skill, skillIndex) => {
-                const skillAngle = (skillIndex / skillCount) * Math.PI * 2;
-                const sx = x + Math.cos(skillAngle) * skillRadius;
-                const sz = z + Math.sin(skillAngle) * skillRadius;
-
-                const skillGeom = new THREE.SphereGeometry(1, 16, 16);
-                const skillStatusColor = getStatusColor(skill.status);
+                const skillGeom = new THREE.SphereGeometry(1.2, 16, 16);
+                const skillColor = getStatusColor(skill.status);
                 const skillMat = new THREE.MeshPhongMaterial({
-                    color: skillStatusColor,
-                    emissive: skillStatusColor,
+                    color: skillColor,
+                    emissive: skillColor,
                     emissiveIntensity: 0.3,
                 });
 
@@ -207,141 +189,26 @@ class InternalViewRenderer {
                     type: 'skill',
                     skillName: skill.name,
                     status: skill.status,
-                    brainArea: skill.brain_area,
                 };
                 group.add(skillMesh);
                 this.skillMeshes.set(skill.name, skillMesh);
 
-                // Connection to area
-                const skillLineGeom = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(x, 0, z),
+                // Connexion Aire -> Skill
+                const sLineGeom = new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(ax, 0, az),
                     new THREE.Vector3(sx, 0, sz),
                 ]);
-                const skillLineMat = new THREE.LineBasicMaterial({
-                    color: skillStatusColor,
+                const sLineMat = new THREE.LineBasicMaterial({
+                    color: skillColor,
                     transparent: true,
                     opacity: 0.5,
                 });
-                const skillLine = new THREE.Line(skillLineGeom, skillLineMat);
-                group.add(skillLine);
+                group.add(new THREE.Line(sLineGeom, sLineMat));
+
+                // Label skill
+                this._addLabel(skillMesh, skill.name, 2);
             });
         });
-    }
-
-    /**
-     * Vue interne d'un Heart: Heart central + skills connectés
-     */
-    _renderHeartInternal(machine, state) {
-        const group = this.internalGroup;
-        const skills = state.skills || [];
-
-        // Central Heart representation (red icosahedron)
-        const heartGeom = new THREE.IcosahedronGeometry(3);
-        const heartColor = 0xff3333; // Rouge vif pour le Heart
-
-        const heartMat = new THREE.MeshPhongMaterial({
-            color: heartColor,
-            emissive: heartColor,
-            emissiveIntensity: 0.4,
-            transparent: true,
-            opacity: 0.9,
-        });
-
-        this.heartMesh = new THREE.Mesh(heartGeom, heartMat);
-        this.heartMesh.name = 'heart-center';
-
-        // Add pulsing glow effect
-        const glowGeom = new THREE.IcosahedronGeometry(3.5);
-        const glowMat = new THREE.MeshBasicMaterial({
-            color: 0xff0000,
-            transparent: true,
-            opacity: 0.15,
-            side: THREE.BackSide,
-        });
-        const glowMesh = new THREE.Mesh(glowGeom, glowMat);
-        this.heartMesh.add(glowMesh);
-        this.heartMesh.userData = {
-            type: 'heart',
-            nodeId: machine.node_id,
-            hostname: machine.hostname,
-            status: machine.status || 'UP',
-        };
-        group.add(this.heartMesh);
-
-        // Add label
-        this._addLabel(this.heartMesh, machine.hostname, 4);
-
-        // Filter skills on this machine
-        const machineSkills = skills.filter(s =>
-            s.deployed_on?.includes(machine.hostname) ||
-            s.deployed_on?.includes(machine.node_id) ||
-            machine.skills?.includes(s.name)
-        );
-
-        // If no specific skills, show all with unknown deployment
-        const displaySkills = machineSkills.length > 0 ? machineSkills :
-            skills.filter(s => !s.deployed_on || s.deployed_on.length === 0).slice(0, 5);
-
-        // Place skills around the heart
-        const skillRadius = 12;
-        const skillCount = displaySkills.length || 1;
-
-        displaySkills.forEach((skill, index) => {
-            const angle = (index / skillCount) * Math.PI * 2;
-            const x = Math.cos(angle) * skillRadius;
-            const z = Math.sin(angle) * skillRadius;
-
-            const skillGeom = new THREE.SphereGeometry(1.5, 16, 16);
-            const skillStatusColor = getStatusColor(skill.status);
-            const skillMat = new THREE.MeshPhongMaterial({
-                color: skillStatusColor,
-                emissive: skillStatusColor,
-                emissiveIntensity: 0.3,
-            });
-
-            const skillMesh = new THREE.Mesh(skillGeom, skillMat);
-            skillMesh.position.set(x, 0, z);
-            skillMesh.name = skill.name;
-            skillMesh.userData = {
-                type: 'skill',
-                skillName: skill.name,
-                status: skill.status,
-                brainArea: skill.brain_area,
-            };
-            group.add(skillMesh);
-            this.skillMeshes.set(skill.name, skillMesh);
-
-            // Connection to heart
-            const lineGeom = new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(0, 0, 0),
-                new THREE.Vector3(x, 0, z),
-            ]);
-            const lineMat = new THREE.LineBasicMaterial({
-                color: skillStatusColor,
-                transparent: true,
-                opacity: 0.5,
-            });
-            const line = new THREE.Line(lineGeom, lineMat);
-            group.add(line);
-
-            // Add skill label
-            this._addLabel(skillMesh, skill.name, 2.5);
-        });
-
-        // Add connection tube going "up" to represent network connection
-        const tubePoints = [
-            new THREE.Vector3(0, 0, 0),
-            new THREE.Vector3(0, 15, 0),
-        ];
-        const tubeCurve = new THREE.CatmullRomCurve3(tubePoints);
-        const tubeGeom = new THREE.TubeGeometry(tubeCurve, 20, 0.3, 8, false);
-        const tubeMat = new THREE.MeshBasicMaterial({
-            color: 0x00d4aa,
-            transparent: true,
-            opacity: 0.3,
-        });
-        const tubeMesh = new THREE.Mesh(tubeGeom, tubeMat);
-        group.add(tubeMesh);
     }
 
     _addLabel(mesh, text, yOffset = 3) {

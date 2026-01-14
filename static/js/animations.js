@@ -41,9 +41,6 @@ class AnimationManager {
             }
         });
 
-        // Animate special meshes (Core satellites, Forge particles)
-        machineRenderer?.animateSpecial(this.time);
-
         requestAnimationFrame(() => this._animate());
     }
 
