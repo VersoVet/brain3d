@@ -289,6 +289,45 @@ body {
     text-transform: uppercase;
 }
 
+/* Action buttons */
+.panel-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid #333;
+}
+
+.action-btn {
+    flex: 1;
+    padding: 8px 12px;
+    background: rgba(0, 212, 170, 0.15);
+    border: 1px solid #00d4aa;
+    border-radius: 6px;
+    color: #00d4aa;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    background: rgba(0, 212, 170, 0.3);
+}
+
+.action-btn:active {
+    transform: scale(0.98);
+}
+
+.action-btn.danger {
+    background: rgba(255, 136, 0, 0.15);
+    border-color: #ff8800;
+    color: #ff8800;
+}
+
+.action-btn.danger:hover {
+    background: rgba(255, 136, 0, 0.3);
+}
+
 /* Breadcrumb */
 #breadcrumb {
     position: absolute;

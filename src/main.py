@@ -268,6 +268,18 @@ async def websocket_endpoint(websocket: WebSocket):
         # Boucle de reception
         while True:
             data = await websocket.receive_json()
+
+            # Traitement spécial pour refresh
+            if data.get("type") == "refresh":
+                if state_manager:
+                    state = await state_manager.refresh_all()
+                    await websocket.send_json({
+                        "type": "refresh",
+                        "reason": "manual",
+                        "data": state.model_dump(mode='json'),
+                    })
+                continue
+
             response = await ws_manager.handle_client_message(client_id, data)
             await websocket.send_json(response)
 

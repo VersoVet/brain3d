@@ -74,11 +74,13 @@ class UIManager {
         if (!machine) return;
 
         if (this.elements.panelTitle) {
-            this.elements.panelTitle.textContent = machine.hostname || machine.node_id;
+            const icon = this._getMachineIcon(machine.machine_type);
+            this.elements.panelTitle.innerHTML = `${icon} ${machine.hostname || machine.node_id}`;
         }
 
         if (this.elements.panelContent) {
             const statusClass = `status-${(machine.status || 'unknown').toLowerCase()}`;
+            const typeLabel = this._getTypeLabel(machine.machine_type);
 
             this.elements.panelContent.innerHTML = `
                 <div class="info-row">
@@ -87,8 +89,14 @@ class UIManager {
                 </div>
                 <div class="info-row">
                     <span class="info-label">Type</span>
-                    <span class="info-value">${machine.machine_type || 'Unknown'}</span>
+                    <span class="info-value">${typeLabel}</span>
                 </div>
+                ${machine.role ? `
+                <div class="info-row">
+                    <span class="info-label">Role</span>
+                    <span class="info-value" style="font-size: 11px;">${machine.role}</span>
+                </div>
+                ` : ''}
                 <div class="info-row">
                     <span class="info-label">IP</span>
                     <span class="info-value">${machine.ip || 'N/A'}</span>
@@ -97,23 +105,72 @@ class UIManager {
                     <span class="info-label">Platform</span>
                     <span class="info-value">${machine.platform || 'Unknown'}</span>
                 </div>
+                ${machine.has_heart ? `
                 <div class="info-row">
                     <span class="info-label">Heart</span>
-                    <span class="info-value">${machine.has_heart ? 'Yes' : 'No'}</span>
-                </div>
-                ${machine.skills?.length ? `
-                <div class="info-row">
-                    <span class="info-label">Skills</span>
-                    <span class="info-value">${machine.skills.length}</span>
+                    <span class="info-value" style="color: #00ff88;">v${machine.heart_version || '?'}</span>
                 </div>
                 ` : ''}
-                ${machine.metrics ? this._renderMetrics(machine.metrics) : ''}
+                ${machine.skills_count > 0 ? `
+                <div class="info-row">
+                    <span class="info-label">Skills</span>
+                    <span class="info-value">${machine.skills_installed || 0} / ${machine.skills_count}</span>
+                </div>
+                ` : ''}
+                ${machine.wol_enabled ? `
+                <div class="info-row">
+                    <span class="info-label">Wake-on-LAN</span>
+                    <span class="info-value" style="color: #00d4aa;">Enabled</span>
+                </div>
+                ` : ''}
+                ${machine.mac ? `
+                <div class="info-row">
+                    <span class="info-label">MAC</span>
+                    <span class="info-value" style="font-size: 10px; font-family: monospace;">${machine.mac}</span>
+                </div>
+                ` : ''}
+                ${machine.metrics && this._hasMetrics(machine.metrics) ? this._renderMetrics(machine.metrics) : ''}
+                ${machine.has_heart ? this._renderActions(machine) : ''}
             `;
         }
 
         if (this.elements.infoPanel) {
             this.elements.infoPanel.classList.remove('hidden');
         }
+    }
+
+    _getMachineIcon(type) {
+        const icons = {
+            core: '🧠',
+            forge: '🔨',
+            heart: '💚',
+            network: '🌐',
+            proxy_target: '👁️',
+        };
+        return icons[type] || '📦';
+    }
+
+    _getTypeLabel(type) {
+        const labels = {
+            core: 'Core (OnyxSoma)',
+            forge: 'Forge (Dev)',
+            heart: 'Heart Node',
+            network: 'Network Device',
+            proxy_target: 'Proxy Target',
+        };
+        return labels[type] || type || 'Unknown';
+    }
+
+    _hasMetrics(metrics) {
+        return metrics && (metrics.cpu_percent > 0 || metrics.ram_percent > 0 || metrics.disk_percent > 0);
+    }
+
+    _renderActions(machine) {
+        return `
+            <div class="panel-actions">
+                <button class="action-btn" onclick="wsClient.requestRefresh()" title="Refresh">🔄 Refresh</button>
+            </div>
+        `;
     }
 
     _renderMetrics(metrics) {
