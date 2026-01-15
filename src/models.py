@@ -22,6 +22,25 @@ class Metrics(BaseModel):
     network_out_mb: float = 0.0
 
 
+class LocalSkill(BaseModel):
+    """Skill tel que vu par le Heart local (depuis :8060/skills)"""
+    name: str
+    status: str = "unknown"  # "running", "stopped", "loaded", "error"
+    pid: Optional[int] = None
+    version: Optional[str] = ""
+    brain_area: str = "external"
+    git_repo: Optional[str] = ""
+    git_commit: Optional[str] = ""
+
+
+class Incoherence(BaseModel):
+    """Incohérence détectée entre Heart local et registre Core"""
+    type: str  # "unexpected_skill", "missing_skill", "version_mismatch", "status_mismatch"
+    skill: str
+    message: str
+    severity: str = "warning"  # "warning", "error"
+
+
 class Skill(BaseModel):
     """Representation d'un skill"""
     name: str
@@ -94,6 +113,18 @@ class Machine(BaseModel):
     # Skills et aires (si Heart present)
     skills: List[str] = Field(default_factory=list)
     areas: List[str] = Field(default_factory=list)
+
+    # Skills locaux (depuis Heart :8060/skills) - NOUVEAU
+    local_skills: List["LocalSkill"] = Field(default_factory=list)
+
+    # Skills attendus par Core registry - NOUVEAU
+    expected_skills: List[str] = Field(default_factory=list)
+
+    # Incohérences détectées entre Heart et Core - NOUVEAU
+    incoherences: List["Incoherence"] = Field(default_factory=list)
+
+    # Flag de cohérence - NOUVEAU
+    is_coherent: bool = True
 
     # Position 3D (pour force-directed layout)
     position: Dict[str, float] = Field(default_factory=lambda: {"x": 0, "y": 0, "z": 0})

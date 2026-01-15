@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Any
 import httpx
 
 from .config import CORE_URL, NETWORK_INVENTORY_URL, MachineType, Status
-from .models import Machine, Skill, Area, NetworkState, Metrics
+from .models import Machine, Skill, Area, NetworkState, Metrics, LocalSkill, Incoherence
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +45,13 @@ class DataClient:
     # =========================================================================
 
     async def get_full_state(self) -> NetworkState:
-        """Récupère l'état complet depuis toutes les sources"""
-        # Requêtes parallèles
-        core_nodes, core_skills, network_devices = await asyncio.gather(
+        """Récupère l'état complet depuis toutes les sources + interroge les Hearts"""
+        # 1. Requêtes parallèles aux sources principales
+        core_nodes, core_skills, network_devices, deploy_matrix = await asyncio.gather(
             self._get_nodes_from_core(),
             self._get_skills_from_core(),
             self._get_devices_from_network_inventory(),
+            self._get_deploy_matrix_from_core(),
             return_exceptions=True,
         )
 
@@ -64,9 +65,33 @@ class DataClient:
         if isinstance(network_devices, Exception):
             logger.error(f"Erreur network-inventory: {network_devices}")
             network_devices = {}
+        if isinstance(deploy_matrix, Exception):
+            logger.error(f"Erreur Core deploy matrix: {deploy_matrix}")
+            deploy_matrix = {}
 
-        # Fusionner les machines
-        machines = self._merge_machines(core_nodes, network_devices)
+        # 2. Interroger chaque Heart UP pour ses skills locaux
+        heart_queries = {}
+        for node in core_nodes:
+            ip = node.get("ip", "")
+            hostname = node.get("hostname", "")
+            if node.get("heart_status") == "up" and ip:
+                heart_queries[hostname] = self._query_heart(ip)
+
+        # Exécuter les requêtes Heart en parallèle
+        if heart_queries:
+            hostnames = list(heart_queries.keys())
+            results = await asyncio.gather(*heart_queries.values(), return_exceptions=True)
+            heart_skills_by_node = dict(zip(hostnames, results))
+        else:
+            heart_skills_by_node = {}
+
+        # 3. Construire la matrice des skills attendus par node
+        expected_by_node = self._build_expected_skills_by_node(deploy_matrix)
+
+        # 4. Fusionner les machines avec skills locaux et incohérences
+        machines = self._merge_machines_with_coherence(
+            core_nodes, network_devices, heart_skills_by_node, expected_by_node
+        )
 
         # Extraire les aires depuis les skills
         areas = self._extract_areas(core_skills)
@@ -126,6 +151,36 @@ class DataClient:
             logger.error(f"Erreur GET /skills: {e}")
             return []
 
+    async def _get_deploy_matrix_from_core(self) -> Dict[str, Any]:
+        """GET /deploy/matrix - Matrice de déploiement skill→node"""
+        client = await self._get_client()
+        try:
+            response = await client.get(f"{self.core_url}/deploy/matrix")
+            response.raise_for_status()
+            data = response.json()
+            logger.info(f"Core: deploy matrix récupérée")
+            return data
+        except Exception as e:
+            logger.error(f"Erreur GET /deploy/matrix: {e}")
+            return {}
+
+    # =========================================================================
+    # Heart API (interrogation directe)
+    # =========================================================================
+
+    async def _query_heart(self, ip: str) -> Dict[str, Any]:
+        """Interroge un Heart directement sur port 8060 pour ses skills locaux"""
+        client = await self._get_client()
+        try:
+            response = await client.get(f"http://{ip}:8060/skills", timeout=5.0)
+            response.raise_for_status()
+            data = response.json()
+            logger.debug(f"Heart {ip}: {len(data)} skills locaux")
+            return data
+        except Exception as e:
+            logger.warning(f"Impossible d'interroger Heart {ip}: {e}")
+            return {}
+
     # =========================================================================
     # Network Inventory API
     # =========================================================================
@@ -145,13 +200,82 @@ class DataClient:
             return {}
 
     # =========================================================================
-    # Fusion des données
+    # Fusion des données avec cohérence
     # =========================================================================
 
-    def _merge_machines(
-        self, core_nodes: List[Dict], network_devices: Dict[str, Dict]
+    def _build_expected_skills_by_node(self, deploy_matrix: Dict) -> Dict[str, List[str]]:
+        """Construit la liste des skills attendus par node depuis la matrice"""
+        expected_by_node: Dict[str, List[str]] = {}
+
+        # La matrice est structurée comme: {"matrix": {skill_id: {node_id: deployment}}}
+        matrix = deploy_matrix.get("matrix", {})
+
+        for skill_id, nodes in matrix.items():
+            if not isinstance(nodes, dict):
+                continue
+            for node_id, deployment in nodes.items():
+                if isinstance(deployment, dict) and deployment.get("status") in ("installed", "running"):
+                    skill_name = deployment.get("skill_name") or skill_id.split("/")[-1]
+                    if node_id not in expected_by_node:
+                        expected_by_node[node_id] = []
+                    expected_by_node[node_id].append(skill_name)
+
+        return expected_by_node
+
+    def _parse_heart_skills(self, heart_data: Dict[str, Any]) -> List[LocalSkill]:
+        """Parse les skills retournés par un Heart en LocalSkill"""
+        skills = []
+        for name, info in heart_data.items():
+            if isinstance(info, dict):
+                skill = LocalSkill(
+                    name=name,
+                    status=info.get("status", "unknown"),
+                    pid=info.get("pid"),
+                    version=info.get("version", ""),
+                    brain_area=info.get("brain_area", "external"),
+                    git_repo=info.get("git_repo", ""),
+                    git_commit=info.get("git_commit", ""),
+                )
+                skills.append(skill)
+        return skills
+
+    def _detect_incoherences(
+        self, hostname: str, local_skills: List[LocalSkill], expected_skills: List[str]
+    ) -> List[Incoherence]:
+        """Détecte les incohérences entre skills locaux et attendus"""
+        incoherences = []
+
+        local_names = {s.name for s in local_skills}
+        expected_names = set(expected_skills)
+
+        # Skill présent localement mais pas attendu par Core
+        for name in local_names - expected_names:
+            incoherences.append(Incoherence(
+                type="unexpected_skill",
+                skill=name,
+                message=f"Skill '{name}' présent sur Heart mais pas dans registre Core",
+                severity="warning",
+            ))
+
+        # Skill attendu par Core mais absent localement
+        for name in expected_names - local_names:
+            incoherences.append(Incoherence(
+                type="missing_skill",
+                skill=name,
+                message=f"Skill '{name}' attendu par Core mais absent du Heart",
+                severity="error",
+            ))
+
+        return incoherences
+
+    def _merge_machines_with_coherence(
+        self,
+        core_nodes: List[Dict],
+        network_devices: Dict[str, Dict],
+        heart_skills_by_node: Dict[str, Any],
+        expected_by_node: Dict[str, List[str]],
     ) -> List[Machine]:
-        """Fusionne les nodes Core avec les devices network-inventory"""
+        """Fusionne les nodes avec skills locaux et détection d'incohérences"""
         machines = []
         seen_ips = set()
 
@@ -176,6 +300,21 @@ class DataClient:
             else:
                 status = Status.UNKNOWN
 
+            # Skills locaux depuis Heart
+            heart_data = heart_skills_by_node.get(hostname, {})
+            if isinstance(heart_data, Exception):
+                heart_data = {}
+                logger.warning(f"Erreur Heart {hostname}: {heart_data}")
+
+            local_skills = self._parse_heart_skills(heart_data)
+
+            # Skills attendus depuis Core
+            expected_skills = expected_by_node.get(ip, []) or expected_by_node.get(hostname, [])
+
+            # Détecter les incohérences
+            incoherences = self._detect_incoherences(hostname, local_skills, expected_skills)
+            is_coherent = len(incoherences) == 0
+
             machine = Machine(
                 node_id=hostname,
                 hostname=hostname,
@@ -195,8 +334,16 @@ class DataClient:
                 managed=device_info.get("managed", True),
                 last_seen=self._parse_datetime(node.get("last_seen")),
                 tags=node.get("tags", []),
+                # Nouveaux champs
+                local_skills=local_skills,
+                expected_skills=expected_skills,
+                incoherences=incoherences,
+                is_coherent=is_coherent,
             )
             machines.append(machine)
+
+            if not is_coherent:
+                logger.info(f"Incohérences détectées sur {hostname}: {[i.message for i in incoherences]}")
 
         # 2. Ensuite les devices network-inventory qui n'ont PAS de Heart
         for name, device in network_devices.items():

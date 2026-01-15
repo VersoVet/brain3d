@@ -41,6 +41,11 @@ class AnimationManager {
             }
         });
 
+        // Animate warning rings on incoherent machines
+        if (machineRenderer) {
+            machineRenderer.animateWarnings(this.time);
+        }
+
         requestAnimationFrame(() => this._animate());
     }
 

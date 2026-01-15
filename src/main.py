@@ -83,10 +83,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Erreur chargement etat initial: {e}")
 
+    # Démarrer la connexion WebSocket vers Core (temps réel)
+    try:
+        await state_manager.start_core_ws()
+        logger.info("Core WebSocket connecté")
+    except Exception as e:
+        logger.warning(f"Core WebSocket non disponible: {e}")
+
     yield
 
     # Cleanup
     logger.info("Arret Brain3D...")
+    await state_manager.stop_core_ws()
     await redis_subscriber.stop()
     await ws_manager.stop()
     await data_client.close()

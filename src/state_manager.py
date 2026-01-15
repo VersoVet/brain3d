@@ -1,15 +1,19 @@
 """
 Brain3D - Gestionnaire d'état simplifié
 Cache + broadcast WebSocket - la logique métier est dans DataClient
++ Connexion WebSocket Core pour événements temps réel
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
+import websockets
+
 from .config import (
-    Status, CACHE_TTL,
+    Status, CACHE_TTL, CORE_URL,
     STATUS_COLORS, STATUS_ANIMATIONS, MACHINE_SHAPES, MACHINE_BASE_COLORS
 )
 from .models import Machine, Skill, Area, NetworkState, RedisEvent, Metrics
@@ -43,6 +47,10 @@ class StateManager:
 
         # Lock pour accès concurrent
         self._lock = asyncio.Lock()
+
+        # Core WebSocket
+        self._core_ws_task: Optional[asyncio.Task] = None
+        self._core_ws_running = False
 
     # =========================================================================
     # Refresh depuis les sources
@@ -238,3 +246,118 @@ class StateManager:
                 }
 
         return {"shape": "sphere", "color": "#666666", "animation": "none"}
+
+    # =========================================================================
+    # Core WebSocket - Événements temps réel
+    # =========================================================================
+
+    async def start_core_ws(self):
+        """Démarre la connexion WebSocket vers Core"""
+        if self._core_ws_running:
+            return
+
+        self._core_ws_running = True
+        self._core_ws_task = asyncio.create_task(self._core_ws_loop())
+        logger.info("Core WebSocket démarré")
+
+    async def stop_core_ws(self):
+        """Arrête la connexion WebSocket vers Core"""
+        self._core_ws_running = False
+        if self._core_ws_task:
+            self._core_ws_task.cancel()
+            try:
+                await self._core_ws_task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Core WebSocket arrêté")
+
+    async def _core_ws_loop(self):
+        """Boucle de connexion WebSocket Core avec reconnexion automatique"""
+        core_ws_url = CORE_URL.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+
+        while self._core_ws_running:
+            try:
+                logger.info(f"Connexion Core WebSocket: {core_ws_url}")
+                async with websockets.connect(core_ws_url) as ws:
+                    logger.info("Core WebSocket connecté")
+
+                    async for message in ws:
+                        try:
+                            event = json.loads(message)
+                            await self._handle_core_event(event)
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"Core WS message invalide: {e}")
+
+            except websockets.exceptions.ConnectionClosed:
+                logger.warning("Core WebSocket déconnecté, reconnexion dans 5s...")
+            except Exception as e:
+                logger.error(f"Erreur Core WebSocket: {e}")
+
+            if self._core_ws_running:
+                await asyncio.sleep(5)  # Attendre avant reconnexion
+
+    async def _handle_core_event(self, event: dict):
+        """Traite un événement reçu de Core WebSocket"""
+        event_type = event.get("type", "")
+
+        # Événements qui déclenchent un refresh complet
+        refresh_events = {
+            "skill:registered",
+            "skill:unregistered",
+            "deploy:completed",
+            "deploy:failed",
+            "heart:connected",
+            "heart:disconnected",
+        }
+
+        # Événements de changement de statut
+        status_events = {
+            "skill:status_changed",
+            "heart:metrics",
+        }
+
+        if event_type in refresh_events:
+            logger.info(f"Core event {event_type} → refresh complet")
+            state = await self.refresh_all()
+            await self.ws_manager.broadcast({
+                "type": "refresh",
+                "reason": event_type,
+                "data": state.model_dump(mode='json'),
+            })
+
+        elif event_type in status_events:
+            # Pour les changements de statut, on peut être plus granulaire
+            data = event.get("data", {})
+
+            if event_type == "skill:status_changed":
+                skill_name = data.get("name") or data.get("skill")
+                new_status = data.get("status", "UNKNOWN")
+                logger.debug(f"Core event: skill {skill_name} → {new_status}")
+
+                # Mettre à jour le cache local
+                async with self._lock:
+                    skill = self._skills.get(skill_name)
+                    if skill:
+                        try:
+                            skill.status = Status(new_status.upper())
+                        except ValueError:
+                            skill.status = Status.UNKNOWN
+
+                # Broadcast le changement
+                await self.ws_manager.broadcast_status_update(
+                    "skill", skill_name, new_status
+                )
+
+            elif event_type == "heart:metrics":
+                node = data.get("node") or data.get("hostname")
+                metrics = data.get("metrics", {})
+                logger.debug(f"Core event: heart metrics {node}")
+
+                await self.ws_manager.broadcast_metrics_update(node, metrics)
+
+        elif event_type == "skill:heartbeat":
+            # Heartbeat simple - juste logger
+            pass
+
+        else:
+            logger.debug(f"Core event ignoré: {event_type}")

@@ -9,6 +9,7 @@ class MachineRenderer {
         this.meshes = new Map(); // nodeId -> mesh
         this.metricsRings = new Map(); // nodeId -> {cpuRing, ramRing}
         this.metricsVisible = true;
+        this.incoherentMachines = new Map(); // nodeId -> warningRing (pour animation)
     }
 
     createMachine(machine) {
@@ -56,6 +57,7 @@ class MachineRenderer {
     /**
      * Cube pour machine avec Heart
      * Couleur selon type: cyan (core), violet (forge), vert (heart standard)
+     * Ajoute indicateur visuel si incohérence détectée
      */
     _createHeartCube(machine, type, status) {
         const group = new THREE.Group();
@@ -110,7 +112,47 @@ class MachineRenderer {
         // Anneaux métriques
         this._addMetricsRings(group, machine.node_id, size);
 
+        // Indicateur d'incohérence si détecté
+        if (machine.is_coherent === false && machine.incoherences?.length > 0) {
+            const warningRing = this._createWarningRing(size);
+            group.add(warningRing);
+            this.incoherentMachines.set(machine.node_id, warningRing);
+            group.userData.hasIncoherence = true;
+            group.userData.incoherenceCount = machine.incoherences.length;
+        }
+
         return group;
+    }
+
+    /**
+     * Crée un anneau rouge pulsant pour signaler une incohérence
+     */
+    _createWarningRing(baseSize) {
+        const ringGeom = new THREE.TorusGeometry(baseSize * 0.9, 0.15, 8, 32);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0xff4444,  // Rouge
+            transparent: true,
+            opacity: 0.8,
+        });
+        const ring = new THREE.Mesh(ringGeom, ringMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.userData.isWarning = true;
+        return ring;
+    }
+
+    /**
+     * Anime les anneaux d'avertissement (pulse rouge)
+     */
+    animateWarnings(time) {
+        this.incoherentMachines.forEach((ring, nodeId) => {
+            if (ring && ring.material) {
+                // Pulse l'opacité
+                ring.material.opacity = 0.4 + Math.sin(time * 4) * 0.4;
+                // Pulse la taille
+                const scale = 1 + Math.sin(time * 3) * 0.1;
+                ring.scale.setScalar(scale);
+            }
+        });
     }
 
     /**
