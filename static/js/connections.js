@@ -7,6 +7,7 @@ class ConnectionRenderer {
     constructor(scene) {
         this.scene = scene;
         this.lines = new Map(); // connectionId -> line
+        this.vipTubes = new Map(); // heartId -> tube (VIP connections to Core)
         this.particles = []; // Active message particles
         this.particlePool = []; // Reusable particles
         this.maxParticles = 150;
@@ -164,6 +165,8 @@ class ConnectionRenderer {
         this.lines.forEach((line, connectionId) => {
             this.updateConnection(connectionId);
         });
+        // Also update VIP tubes
+        this.updateAllVIPConnections();
     }
 
     removeConnection(connectionId) {
@@ -180,11 +183,92 @@ class ConnectionRenderer {
         });
         this.lines.clear();
 
+        // Clear VIP tubes
+        this.vipTubes.forEach((tube) => {
+            this.scene.connectionsGroup.remove(tube);
+            tube.geometry.dispose();
+            tube.material.dispose();
+        });
+        this.vipTubes.clear();
+
         // Clear particles
         this.particles.forEach(p => {
             this.scene.connectionsGroup.remove(p.mesh);
         });
         this.particles = [];
+    }
+
+    /**
+     * Crée un tube courbé pour connexion VIP (Hearts → Core via Keepalived)
+     */
+    createVIPConnection(heartId, coreId) {
+        const fromMesh = machineRenderer?.getMesh(heartId);
+        const toMesh = machineRenderer?.getMesh(coreId);
+
+        if (!fromMesh || !toMesh) return null;
+
+        // Courbe Bézier entre les deux points
+        const start = fromMesh.position.clone();
+        const end = toMesh.position.clone();
+        const mid = start.clone().add(end).multiplyScalar(0.5);
+        mid.y += 4; // Courbe vers le haut
+
+        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+
+        // Tube geometry
+        const geometry = new THREE.TubeGeometry(curve, 20, 0.12, 8, false);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x00d4aa, // Cyan (couleur Core)
+            transparent: true,
+            opacity: 0.35,
+        });
+
+        const tube = new THREE.Mesh(geometry, material);
+        tube.name = `vip-${heartId}-${coreId}`;
+        tube.userData = {
+            fromId: heartId,
+            toId: coreId,
+            type: 'vip',
+        };
+
+        this.scene.connectionsGroup.add(tube);
+        this.vipTubes.set(heartId, tube);
+
+        return tube;
+    }
+
+    /**
+     * Met à jour la position d'un tube VIP
+     */
+    updateVIPConnection(heartId) {
+        const tube = this.vipTubes.get(heartId);
+        if (!tube) return;
+
+        const fromMesh = machineRenderer?.getMesh(heartId);
+        const toMesh = machineRenderer?.getMesh(this.coreId);
+
+        if (!fromMesh || !toMesh) return;
+
+        // Recréer la courbe avec nouvelles positions
+        const start = fromMesh.position.clone();
+        const end = toMesh.position.clone();
+        const mid = start.clone().add(end).multiplyScalar(0.5);
+        mid.y += 4;
+
+        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+        const newGeometry = new THREE.TubeGeometry(curve, 20, 0.12, 8, false);
+
+        tube.geometry.dispose();
+        tube.geometry = newGeometry;
+    }
+
+    /**
+     * Met à jour tous les tubes VIP
+     */
+    updateAllVIPConnections() {
+        this.vipTubes.forEach((tube, heartId) => {
+            this.updateVIPConnection(heartId);
+        });
     }
 
     createAllConnections(machines) {
@@ -209,12 +293,15 @@ class ConnectionRenderer {
                 // Core connections (plus visibles)
                 if (m1.machine_type === 'core' || m2.machine_type === 'core') {
                     const other = m1.machine_type === 'core' ? m2 : m1;
+                    const coreNode = m1.machine_type === 'core' ? m1 : m2;
+
                     if (other.machine_type === 'forge') {
                         color = 0xaa44ff; // Violet pour Forge
                         baseOpacity = 0.25;
                     } else if (other.machine_type === 'heart') {
-                        color = 0x00d4aa; // Cyan pour Hearts
-                        baseOpacity = 0.2;
+                        // Utiliser un tube VIP pour Heart→Core
+                        this.createVIPConnection(other.node_id, coreNode.node_id);
+                        continue; // Skip la ligne normale
                     } else if (other.machine_type === 'network') {
                         color = 0x4488ff; // Bleu pour Network
                         baseOpacity = 0.12;

@@ -46,6 +46,9 @@ class AnimationManager {
             machineRenderer.animateWarnings(this.time);
         }
 
+        // Animate Core electrons
+        this._animateElectrons();
+
         requestAnimationFrame(() => this._animate());
     }
 
@@ -82,6 +85,32 @@ class AnimationManager {
             const opacity = 0.5 + Math.abs(Math.sin(this.time * CONFIG.ANIMATIONS.blinkSpeed)) * 0.5;
             mainMesh.material.opacity = opacity;
         }
+    }
+
+    /**
+     * Anime les électrons orbitant autour du Core (OnyxSoma)
+     */
+    _animateElectrons() {
+        const coreMesh = machineRenderer?.getMesh('OnyxSoma');
+        if (!coreMesh || !coreMesh.userData.electronGroup) return;
+
+        const electronGroup = coreMesh.userData.electronGroup;
+
+        electronGroup.children.forEach(child => {
+            // Only animate the electron spheres, not the trail torus
+            if (child.userData && child.userData.orbitRadius) {
+                const { orbitRadius, speed, tiltX, tiltZ } = child.userData;
+                child.userData.angle += speed * 0.02;
+
+                const angle = child.userData.angle;
+                child.position.x = Math.cos(angle) * orbitRadius;
+                child.position.y = Math.sin(angle) * orbitRadius * Math.cos(tiltX);
+                child.position.z = Math.sin(angle) * orbitRadius * Math.sin(tiltZ);
+            }
+        });
+
+        // Rotation lente du groupe entier
+        electronGroup.rotation.y += 0.002;
     }
 
     setAnimation(nodeId, type) {

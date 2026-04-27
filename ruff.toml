@@ -1,0 +1,67 @@
+[lint]
+preview = true  # requis pour DOC rules
+select = [
+    # === BASE (bloquant) ===
+    "E",     # pycodestyle errors
+    "F",     # pyflakes (imports, variables)
+    "W",     # pycodestyle warnings
+    "I",     # isort (tri imports)
+    "UP",    # pyupgrade (Python 3.12+)
+    "B",     # flake8-bugbear (bugs courants)
+
+    # === DOCSTRINGS (bloquant > 30% coverage) ===
+    "D",     # pydocstyle (docstrings Google convention)
+
+    # === QUALITE CODE ===
+    "SIM",   # flake8-simplify (simplification code)
+    "RET",   # flake8-return (retours coherents)
+    "C4",    # flake8-comprehensions (list/dict/set)
+    "PERF",  # perflint (performances, copies inutiles)
+    "FURB",  # refurb (modernisations supplementaires)
+    "PIE",   # flake8-pie (code inutile)
+
+    # === SECURITE & HYGIENE ===
+    "A",     # flake8-builtins (pas de shadowing list/dict/id)
+    "T10",   # flake8-debugger (pas de breakpoint/pdb)
+    "T20",   # flake8-print (utiliser logger, pas print)
+    "ISC",   # flake8-implicit-str-concat (bug subtil)
+    "LOG",   # flake8-logging (bonnes pratiques)
+    "RUF",   # ruff-specific (unused noqa, ambiguous unicode)
+    "EM",    # flake8-errmsg (messages erreur dans variables)
+
+    # === FRAMEWORKS ===
+    "FAST",  # FastAPI (regles specifiques)
+    "PT",    # flake8-pytest-style (conventions pytest)
+    "ASYNC", # flake8-async (erreurs async/await)
+    "PTH",   # flake8-use-pathlib (Path > os.path)
+
+    # === COMPLETUDE DOCSTRINGS (progression) ===
+    "ARG",   # flake8-unused-arguments
+    "DOC",   # pydoclint (Returns/Raises dans docstrings)
+]
+ignore = [
+    "E501",    # line too long (gere par formatter)
+    # --- Docstrings ---
+    "D100",    # module docstring
+    "D104",    # package __init__.py docstring
+    "D105",    # magic method docstring
+    "D107",    # __init__ docstring
+    "D203",    # conflicts with D211
+    "D213",    # conflicts with D212
+    # --- Style ---
+    "RET504",  # unnecessary assignment before return (lisibilite)
+    "ISC001",  # implicit string concat (conflicts with formatter)
+    # --- Args (FastAPI inject patterns) ---
+    "ARG001",  # unused function arg (FastAPI Depends injection)
+    "ARG002",  # unused method arg (callbacks, overrides)
+]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.flake8-unused-arguments]
+ignore-variadic-names = true
+
+[format]
+quote-style = "double"
+indent-style = "space"

@@ -159,8 +159,26 @@ body {
     right: 20px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    font-size: 12px;
+    gap: 12px;
+    font-size: 11px;
+    max-width: 180px;
+}
+
+.legend-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.legend-section h4 {
+    font-size: 10px;
+    font-weight: 500;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #333;
 }
 
 .legend-item {
@@ -173,11 +191,16 @@ body {
     width: 16px;
     height: 16px;
     display: inline-block;
+    flex-shrink: 0;
 }
 
 .legend-shape.cube {
     background: #00ff88;
     border-radius: 2px;
+}
+
+.legend-shape.cube.green {
+    background: #00ff88;
 }
 
 .legend-shape.sphere {
@@ -188,24 +211,110 @@ body {
     background: #4488ff;
 }
 
-.legend-shape.dodeca {
-    background: #00d4aa;
-    clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
-}
-
+/* Icosahedron shape for Core */
 .legend-shape.icosa {
-    background: #aa44ff;
-    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+    position: relative;
 }
 
-.legend-shape.cyan { background: #00d4aa; }
+.legend-shape.icosa.cyan {
+    background: #00d4aa;
+}
+
+/* Electrons animation for Core */
+.legend-shape.electrons::before,
+.legend-shape.electrons::after {
+    content: '';
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: #fff;
+    border-radius: 50%;
+    animation: electron-orbit 2s linear infinite;
+}
+
+.legend-shape.electrons::before {
+    top: -2px;
+    left: 50%;
+    animation-delay: 0s;
+}
+
+.legend-shape.electrons::after {
+    bottom: -2px;
+    right: 0;
+    animation-delay: 1s;
+}
+
+@keyframes electron-orbit {
+    0% { transform: rotate(0deg) translateX(10px) rotate(0deg); }
+    100% { transform: rotate(360deg) translateX(10px) rotate(-360deg); }
+}
+
+/* Torus shape for Forge */
+.legend-shape.torus {
+    width: 18px;
+    height: 10px;
+    border: 3px solid #aa44ff;
+    border-radius: 50%;
+    background: transparent;
+}
+
+.legend-shape.torus.violet {
+    border-color: #aa44ff;
+}
+
 .legend-shape.violet { background: #aa44ff; }
 .legend-shape.lightblue { background: #88aaff; }
 
-.legend-shape.cube-dashed {
-    background: transparent;
-    border: 2px dashed #88aaff;
+/* Connection lines in legend */
+.legend-line {
+    width: 30px;
+    height: 3px;
     border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.legend-line.vip-tube {
+    background: linear-gradient(90deg, #00d4aa, #00ffcc);
+    height: 4px;
+    border-radius: 4px;
+}
+
+.legend-line.forge-line {
+    background: #aa44ff;
+}
+
+.legend-line.heart-line {
+    background: #00ff88;
+    opacity: 0.6;
+}
+
+.legend-line.network-line {
+    background: #4488ff;
+    opacity: 0.5;
+}
+
+/* Message particles in legend */
+.legend-particle {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.legend-particle.heartbeat {
+    background: #00ffaa;
+    box-shadow: 0 0 4px #00ffaa;
+}
+
+.legend-particle.skill-event {
+    background: #ff00ff;
+    box-shadow: 0 0 4px #ff00ff;
+}
+
+.legend-particle.error {
+    background: #ff8800;
+    box-shadow: 0 0 4px #ff8800;
 }
 
 /* Info Panel */

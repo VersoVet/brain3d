@@ -17,10 +17,28 @@ class MachineRenderer {
         const status = machine.status || 'UNKNOWN';
         const hasHeart = machine.has_heart;
 
-        // Simple: Heart = Cube, No Heart = Sphère
-        const mesh = hasHeart
-            ? this._createHeartCube(machine, type, status)
-            : this._createNetworkSphere(machine, status);
+        console.log(`[createMachine] ${machine.hostname}: type=${type}, hasHeart=${hasHeart}, status=${status}`);
+
+        let mesh;
+
+        // Géométrie spécifique selon type
+        if (type === 'core') {
+            // OnyxSoma: Icosaèdre avec électrons
+            console.log(`  -> Creating CORE mesh (Icosahedron)`);
+            mesh = this._createCoreMesh(machine, status);
+        } else if (type === 'forge') {
+            // OnyxDendrite: Torus violet
+            console.log(`  -> Creating FORGE mesh (Torus)`);
+            mesh = this._createForgeTorus(machine, status);
+        } else if (hasHeart) {
+            // Autres machines avec Heart: Cube
+            console.log(`  -> Creating HEART mesh (Cube)`);
+            mesh = this._createHeartCube(machine, type, status);
+        } else {
+            // Devices réseau sans Heart: Sphère
+            console.log(`  -> Creating NETWORK mesh (Sphere)`);
+            mesh = this._createNetworkSphere(machine, status);
+        }
 
         mesh.name = machine.node_id;
         mesh.userData = {
@@ -52,6 +70,197 @@ class MachineRenderer {
         );
 
         return mesh;
+    }
+
+    /**
+     * Icosaèdre pour Core (OnyxSoma) avec champ d'électrons orbitants
+     */
+    _createCoreMesh(machine, status) {
+        const group = new THREE.Group();
+        const size = 5;
+        const color = 0x00d4aa; // Cyan
+        const opacity = status === 'DOWN' ? 0.3 : 0.85;
+
+        // Icosaèdre central
+        const geometry = new THREE.IcosahedronGeometry(size, 0);
+        const material = new THREE.MeshPhongMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: 0.4,
+            transparent: true,
+            opacity: opacity,
+            flatShading: true,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        group.add(mesh);
+        group.userData.mainMesh = mesh;
+
+        // Wireframe icosaèdre
+        const wireGeom = new THREE.IcosahedronGeometry(size * 1.05, 0);
+        const wireMat = new THREE.MeshBasicMaterial({
+            color: color,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.6,
+        });
+        group.add(new THREE.Mesh(wireGeom, wireMat));
+
+        // Champ d'électrons
+        const electronGroup = this._createElectronField(size, color);
+        group.add(electronGroup);
+        group.userData.electronGroup = electronGroup;
+
+        // Glow externe
+        const glowGeom = new THREE.IcosahedronGeometry(size * 1.4, 1);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.08,
+            side: THREE.BackSide,
+        });
+        group.add(new THREE.Mesh(glowGeom, glowMat));
+
+        // Anneaux métriques
+        this._addMetricsRings(group, machine.node_id, size);
+
+        // Indicateur d'incohérence
+        if (machine.is_coherent === false && machine.incoherences?.length > 0) {
+            const warningRing = this._createWarningRing(size);
+            group.add(warningRing);
+            this.incoherentMachines.set(machine.node_id, warningRing);
+            group.userData.hasIncoherence = true;
+            group.userData.incoherenceCount = machine.incoherences.length;
+        }
+
+        return group;
+    }
+
+    /**
+     * Crée un champ d'électrons orbitant autour du Core
+     */
+    _createElectronField(coreSize, color) {
+        const electronGroup = new THREE.Group();
+        electronGroup.name = 'electrons';
+
+        const electronCount = 12;
+        const orbitRadius = coreSize * 1.8;
+
+        for (let i = 0; i < electronCount; i++) {
+            // Petite sphère pour chaque électron
+            const electronGeom = new THREE.SphereGeometry(0.25, 8, 8);
+            const electronMat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.9,
+            });
+            const electron = new THREE.Mesh(electronGeom, electronMat);
+
+            // Position initiale sur orbite
+            const angle = (i / electronCount) * Math.PI * 2;
+            const tilt = (i % 3) * 0.4;
+            electron.userData = {
+                orbitRadius: orbitRadius,
+                angle: angle,
+                speed: 0.5 + Math.random() * 0.5,
+                tiltX: tilt,
+                tiltZ: (i % 2) * 0.6,
+            };
+
+            // Position initiale
+            electron.position.x = Math.cos(angle) * orbitRadius;
+            electron.position.y = Math.sin(angle) * orbitRadius * Math.cos(tilt);
+            electron.position.z = Math.sin(angle) * orbitRadius * Math.sin((i % 2) * 0.6);
+
+            electronGroup.add(electron);
+        }
+
+        // Traînées lumineuses (3 orbites à différentes inclinaisons)
+        const trailGeom = new THREE.TorusGeometry(orbitRadius, 0.05, 8, 64);
+        const trailMat = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.15,
+        });
+        for (let t = 0; t < 3; t++) {
+            const trail = new THREE.Mesh(trailGeom, trailMat.clone());
+            trail.rotation.x = t * 0.4;
+            trail.rotation.z = (t % 2) * 0.6;
+            electronGroup.add(trail);
+        }
+
+        return electronGroup;
+    }
+
+    /**
+     * Torus pour Forge (OnyxDendrite)
+     */
+    _createForgeTorus(machine, status) {
+        const group = new THREE.Group();
+        const radius = 3.5;
+        const tube = 1.2;
+        const color = 0xaa44ff; // Violet
+        const opacity = status === 'DOWN' ? 0.3 : 0.8;
+
+        // Torus principal
+        const geometry = new THREE.TorusGeometry(radius, tube, 16, 48);
+        const material = new THREE.MeshPhongMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: 0.35,
+            transparent: true,
+            opacity: opacity,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.rotation.x = Math.PI / 2; // Horizontal
+        group.add(mesh);
+        group.userData.mainMesh = mesh;
+
+        // Wireframe
+        const wireGeom = new THREE.TorusGeometry(radius * 1.02, tube * 1.02, 16, 48);
+        const wireMat = new THREE.MeshBasicMaterial({
+            color: color,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.5,
+        });
+        const wire = new THREE.Mesh(wireGeom, wireMat);
+        wire.rotation.x = Math.PI / 2;
+        group.add(wire);
+
+        // Noyau central (petite sphère lumineuse)
+        const coreGeom = new THREE.SphereGeometry(1, 16, 16);
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.7,
+        });
+        group.add(new THREE.Mesh(coreGeom, coreMat));
+
+        // Glow
+        const glowGeom = new THREE.TorusGeometry(radius * 1.3, tube * 1.3, 8, 32);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.1,
+            side: THREE.BackSide,
+        });
+        const glow = new THREE.Mesh(glowGeom, glowMat);
+        glow.rotation.x = Math.PI / 2;
+        group.add(glow);
+
+        // Anneaux métriques
+        this._addMetricsRings(group, machine.node_id, radius);
+
+        // Indicateur d'incohérence
+        if (machine.is_coherent === false && machine.incoherences?.length > 0) {
+            const warningRing = this._createWarningRing(radius);
+            group.add(warningRing);
+            this.incoherentMachines.set(machine.node_id, warningRing);
+            group.userData.hasIncoherence = true;
+            group.userData.incoherenceCount = machine.incoherences.length;
+        }
+
+        return group;
     }
 
     /**

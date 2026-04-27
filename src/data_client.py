@@ -374,12 +374,12 @@ class DataClient:
         """Détermine le type de machine selon son hostname"""
         hostname_lower = hostname.lower()
 
-        # Core = OnyxSoma
+        # Core = OnyxSoma (orchestrateur principal)
         if hostname_lower == "onyxsoma":
             return MachineType.CORE
 
-        # Forge = OnyxLab
-        if hostname_lower in ("onyxlab", "onyx-lab"):
+        # Forge = OnyxDendrite (serveur dev avec Forge, LLM Router, Ollama)
+        if hostname_lower in ("onyxdendrite", "onyx-dendrite"):
             return MachineType.FORGE
 
         # Avec Heart = heart
