@@ -7,17 +7,45 @@ __pycache__/
 venv/
 .venv/
 *.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*.sublime-project
+*.sublime-workspace
 
-# Env
+# Env & Secrets
 .env
 .env.*
+.env.local
+local.json
+config/local.json
+
+# Credentials & Keys
+*.key
+*.pem
+*.pfx
+*.p12
+credentials*
+secrets*
+tokens*
+.ssh/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary
+*.tmp
+*.temp
+~*
