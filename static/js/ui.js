@@ -33,12 +33,6 @@ class UIManager {
             e.target.classList.toggle('active', active);
         });
 
-        // Toggle metrics
-        document.getElementById('btn-toggle-metrics')?.addEventListener('click', (e) => {
-            const visible = machineRenderer?.toggleMetrics();
-            e.target.classList.toggle('active', visible);
-        });
-
         // Refresh
         document.getElementById('btn-refresh')?.addEventListener('click', () => {
             wsClient.requestRefresh();
@@ -316,6 +310,97 @@ class UIManager {
         if (this.elements.infoPanel) {
             this.elements.infoPanel.classList.remove('hidden');
         }
+    }
+
+    /**
+     * Show machine skills panel (network view).
+     *
+     * Args:
+     *     machineData: userData from Three.js mesh
+     */
+    showMachineSkills(machineData) {
+        if (!machineData) return;
+
+        const icon = machineData.isCore ? '🧠' : '🖥️';
+        if (this.elements.panelTitle) {
+            this.elements.panelTitle.innerHTML = `${icon} ${machineData.hostname}`;
+        }
+
+        if (this.elements.panelContent) {
+            const skills = machineData.local_skills || [];
+            const statusClass = `status-${(machineData.status || 'unknown').toLowerCase()}`;
+
+            let skillsHtml = '';
+            if (skills.length === 0) {
+                skillsHtml = '<div style="color:#888; font-size:12px; margin-top:8px;">Aucun skill déployé</div>';
+            } else {
+                skillsHtml = `
+                    <div class="info-section" style="margin-top:8px;">
+                        <h4 style="margin:0 0 6px 0; font-size:12px; color:#aaa;">Skills déployés</h4>
+                        ${skills.map((s) => {
+                            const norm = this._normalizeStatus(s.status);
+                            const color = this._getStatusColor(norm);
+                            return `
+                                <div data-skill="${s.name}" style="display:flex; justify-content:space-between; align-items:center;
+                                    font-size:12px; margin:3px 0; padding:3px 6px;
+                                    background:rgba(255,255,255,0.04); border-radius:3px;">
+                                    <span><span style="color:${color};">●</span> ${s.name}</span>
+                                    <span style="color:${color}; font-size:10px;">${norm}</span>
+                                </div>`;
+                        }).join('')}
+                    </div>`;
+            }
+
+            this.elements.panelContent.innerHTML = `
+                <div class="info-row">
+                    <span class="info-label">Status</span>
+                    <span class="info-value ${statusClass}">${machineData.status || 'Unknown'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">IP</span>
+                    <span class="info-value">${machineData.ip || 'N/A'}</span>
+                </div>
+                ${skillsHtml}
+            `;
+        }
+
+        this._currentMachineData = machineData;
+        if (this.elements.infoPanel) {
+            this.elements.infoPanel.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * Update a skill status in the currently open panel.
+     *
+     * Args:
+     *     skillName: Skill name
+     *     status: New status string
+     */
+    updateSkillStatus(skillName, status) {
+        if (!this._currentMachineData) return;
+        const norm = this._normalizeStatus(status);
+        const color = this._getStatusColor(norm);
+        const el = this.elements.panelContent?.querySelector(`[data-skill="${skillName}"]`);
+        if (el) {
+            el.innerHTML = `
+                <span><span style="color:${color};">●</span> ${skillName}</span>
+                <span style="color:${color}; font-size:10px;">${norm}</span>`;
+        }
+    }
+
+    /**
+     * Normalize Heart/Core status to canonical form.
+     *
+     * Args:
+     *     status: Raw status string
+     *
+     * Returns:
+     *     Canonical status (UP, DOWN, ERROR, WORKING)
+     */
+    _normalizeStatus(status) {
+        const map = { running: 'UP', loaded: 'UP', stopped: 'DOWN', error: 'ERROR', unknown: 'DOWN' };
+        return map[status] || status || 'UNKNOWN';
     }
 
     /**

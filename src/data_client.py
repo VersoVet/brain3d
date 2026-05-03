@@ -210,7 +210,7 @@ class DataClient:
         """
         client = await self._get_client()
         try:
-            response = await client.get(f"{self.network_url}/devices")
+            response = await client.get(f"{self.network_url}/api/inventory/devices")
             response.raise_for_status()
             data = response.json()
             devices = data.get("devices", {})
