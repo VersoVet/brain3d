@@ -1,6 +1,6 @@
 {
   "name": "brain3d",
-  "version": "3.1.22",
+  "version": "3.1.23",
   "core": {
     "name": "brain3d",
     "type": "python",

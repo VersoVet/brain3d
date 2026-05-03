@@ -23,17 +23,28 @@ class Brain3DApp {
     }
 
     _setupControls() {
-        // Click on canvas
-        scene3d.renderer.domElement.addEventListener('click', (e) => {
-            window.networkView?.onClick(e);
+        const canvas = scene3d.renderer.domElement;
+        let mouseDownPos = { x: 0, y: 0 };
+
+        // Track mousedown position to distinguish click from drag
+        canvas.addEventListener('mousedown', (e) => {
+            mouseDownPos = { x: e.clientX, y: e.clientY };
+        });
+
+        // Detect click as mouseup with minimal movement
+        canvas.addEventListener('mouseup', (e) => {
+            const dx = e.clientX - mouseDownPos.x;
+            const dy = e.clientY - mouseDownPos.y;
+            if (Math.sqrt(dx * dx + dy * dy) < 5) {
+                window.networkView?.onClick(e);
+            }
         });
 
         // Touch: single tap
         let lastTap = 0;
         let lastTapPos = { x: 0, y: 0 };
-        let tapTimer = null;
 
-        scene3d.renderer.domElement.addEventListener('touchend', (e) => {
+        canvas.addEventListener('touchend', (e) => {
             if (e.changedTouches.length !== 1) return;
             const touch = e.changedTouches[0];
             const now = Date.now();
@@ -42,19 +53,16 @@ class Brain3DApp {
             const dy = touch.clientY - lastTapPos.y;
 
             if (dt < 350 && Math.sqrt(dx * dx + dy * dy) < 40) {
-                // Double-tap — ignore, just prevent zoom
-                clearTimeout(tapTimer);
                 lastTap = 0;
-                return;
+                return; // Double-tap, ignore
             }
 
             lastTap = now;
             lastTapPos = { x: touch.clientX, y: touch.clientY };
 
-            clearTimeout(tapTimer);
-            tapTimer = setTimeout(() => {
+            setTimeout(() => {
                 window.networkView?.onClick({ clientX: touch.clientX, clientY: touch.clientY });
-            }, 350);
+            }, 200);
         }, { passive: true });
     }
 
