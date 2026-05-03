@@ -223,6 +223,137 @@ class UIManager {
         // TODO: Implement toast notifications
         console.log(`[${type}] ${message}`);
     }
+
+    /**
+     * Show skill details.
+     *
+     * Args:
+     *     skill: Skill object
+     *     machineName: optional machine hostname
+     */
+    showSkillInfo(skill, machineName = null) {
+        if (!skill) return;
+
+        if (this.elements.panelTitle) {
+            this.elements.panelTitle.innerHTML = `📦 ${skill.name}`;
+        }
+
+        if (this.elements.panelContent) {
+            const statusClass = `status-${(skill.status || 'unknown').toLowerCase()}`;
+            this.elements.panelContent.innerHTML = `
+                <div class="info-row">
+                    <span class="info-label">Status</span>
+                    <span class="info-value ${statusClass}">${skill.status || 'Unknown'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Version</span>
+                    <span class="info-value">${skill.version || 'N/A'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Brain Area</span>
+                    <span class="info-value">${skill.brain_area || 'N/A'}</span>
+                </div>
+                ${machineName ? `
+                <div class="info-row">
+                    <span class="info-label">Machine</span>
+                    <span class="info-value">${machineName}</span>
+                </div>
+                ` : ''}
+                ${skill.port ? `
+                <div class="info-row">
+                    <span class="info-label">Port</span>
+                    <span class="info-value" style="font-family: monospace;">${skill.port}</span>
+                </div>
+                ` : ''}
+            `;
+        }
+
+        if (this.elements.infoPanel) {
+            this.elements.infoPanel.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * Show brain area details.
+     *
+     * Args:
+     *     area: Area object
+     *     skills: Array of Skill objects in this area
+     */
+    showAreaInfo(area, skills = []) {
+        if (!area) return;
+
+        if (this.elements.panelTitle) {
+            this.elements.panelTitle.innerHTML = `🧠 ${area.name || area.id}`;
+        }
+
+        if (this.elements.panelContent) {
+            const statusClass = `status-${(area.status || 'unknown').toLowerCase()}`;
+            const activeCount = skills.filter((s) => s.status === 'UP').length;
+
+            this.elements.panelContent.innerHTML = `
+                <div class="info-row">
+                    <span class="info-label">Status</span>
+                    <span class="info-value ${statusClass}">${area.status || 'Unknown'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Skills</span>
+                    <span class="info-value">${activeCount}/${skills.length}</span>
+                </div>
+                ${skills.length > 0 ? `
+                <div class="info-section">
+                    <h4 style="margin: 8px 0 4px 0; font-size: 12px;">Skills</h4>
+                    ${skills.map((s) => `
+                        <div style="font-size: 11px; margin: 2px 0; padding: 2px 4px; background: rgba(255,255,255,0.05); border-radius: 2px;">
+                            <span style="color: ${this._getStatusColor(s.status)};">●</span> ${s.name} (${s.status})
+                        </div>
+                    `).join('')}
+                </div>
+                ` : ''}
+            `;
+        }
+
+        if (this.elements.infoPanel) {
+            this.elements.infoPanel.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * Get CSS color for status.
+     *
+     * Args:
+     *     status: Status string
+     *
+     * Returns:
+     *     CSS color value
+     */
+    _getStatusColor(status) {
+        const colors = {
+            UP: '#00ff88',
+            WORKING: '#ff00ff',
+            DOWN: '#555555',
+            ERROR: '#ff8800',
+            UNKNOWN: '#666666',
+        };
+        return colors[status] || colors.UNKNOWN;
+    }
+
+    /**
+     * Set active view button.
+     *
+     * Args:
+     *     viewName: 'network' | 'machine' | 'area'
+     */
+    setActiveViewButton(viewName) {
+        document.querySelectorAll('#view-selector .view-btn').forEach((btn) => {
+            btn.classList.remove('active');
+        });
+        const btnId = `btn-view-${viewName}`;
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            btn.classList.add('active');
+        }
+    }
 }
 
 // Global instance

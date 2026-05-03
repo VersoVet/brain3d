@@ -23,6 +23,7 @@ class Brain3DApp {
         // Initialize managers
         navigation = new NavigationManager(scene3d, this);
         ui = new UIManager();
+        viewManager = new ViewManager(scene3d, this.getState.bind(this));
 
         // Start animations
         animationManager.start();
@@ -33,11 +34,26 @@ class Brain3DApp {
         // Connect WebSocket
         wsClient.connect();
 
+        // Setup view buttons
+        this._setupViewButtons();
+
         // Start physics update loop
         this._startPhysicsLoop();
 
         this.initialized = true;
         console.log('Brain3D initialized');
+    }
+
+    _setupViewButtons() {
+        document.getElementById('btn-view-network')?.addEventListener('click', () => {
+            viewManager?.switchTo('network');
+        });
+        document.getElementById('btn-view-machine')?.addEventListener('click', () => {
+            viewManager?.switchTo('machine');
+        });
+        document.getElementById('btn-view-area')?.addEventListener('click', () => {
+            viewManager?.switchTo('area');
+        });
     }
 
     _setupWebSocketCallbacks() {
@@ -46,12 +62,18 @@ class Brain3DApp {
             console.log('Received state:', state);
             this.state = state;
             this._renderState(state);
+            if (viewManager) {
+                viewManager.updateState(state);
+            }
         });
 
         // Status updates
         wsClient.on('onStatusUpdate', (data) => {
             console.log('Status update:', data);
             this._handleStatusUpdate(data);
+            if (viewManager) {
+                viewManager.handleStatusUpdate(data);
+            }
         });
 
         // Metrics updates
@@ -71,6 +93,9 @@ class Brain3DApp {
             // Forward to connection renderer for particle animation
             if (connectionRenderer) {
                 connectionRenderer.handleRedisEvent(data);
+            }
+            if (viewManager) {
+                viewManager.handleRedisEvent(data);
             }
         });
     }
@@ -175,20 +200,16 @@ class Brain3DApp {
 
         const update = () => {
             const now = performance.now();
-            const deltaTime = (now - lastTime) / 1000; // Convert to seconds
+            const deltaTime = (now - lastTime) / 1000;
             lastTime = now;
 
-            // Update physics
-            physics.update();
-
-            // Update mesh positions
-            machineRenderer.updateAllPositions();
-
-            // Update connection lines
-            connectionRenderer.updateAllConnections();
-
-            // Update message particles
-            connectionRenderer.updateParticles(deltaTime);
+            // Only run physics for network view
+            if (!viewManager || viewManager.currentView === 'network') {
+                physics.update();
+                machineRenderer.updateAllPositions();
+                connectionRenderer.updateAllConnections();
+                connectionRenderer.updateParticles(deltaTime);
+            }
 
             requestAnimationFrame(update);
         };

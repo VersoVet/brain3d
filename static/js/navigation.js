@@ -52,6 +52,14 @@ class NavigationManager {
     }
 
     _onClick(event) {
+        // Delegate to new view renderers if active
+        if (window.viewManager && viewManager.currentView !== 'network') {
+            if (viewManager.activeRenderer && viewManager.activeRenderer.onClick) {
+                viewManager.activeRenderer.onClick(this.scene.raycaster);
+                return;
+            }
+        }
+
         const obj = this.scene.getIntersectedObject(event);
 
         if (obj && obj.userData?.nodeId) {

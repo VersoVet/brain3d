@@ -41,6 +41,11 @@
 
         <!-- Controls -->
         <div id="controls">
+            <div id="view-selector" style="display:flex; gap:4px; margin-right:8px;">
+                <button id="btn-view-network" class="view-btn active" title="Vue Réseau">🌐</button>
+                <button id="btn-view-machine" class="view-btn" title="Vue Machine">🖥️</button>
+                <button id="btn-view-area" class="view-btn" title="Vue Cerveau">🧠</button>
+            </div>
             <button id="btn-reset-view" title="Reset View">⟲</button>
             <button id="btn-toggle-rotate" title="Auto Rotate">↻</button>
             <button id="btn-toggle-metrics" title="Toggle Metrics">📊</button>
@@ -148,17 +153,23 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-    <!-- App modules (v3.10 - Fix network spheres + debug logs) -->
-    <script src="/static/js/config.js?v=3.10"></script>
-    <script src="/static/js/websocket.js?v=3.10"></script>
-    <script src="/static/js/scene.js?v=3.10"></script>
-    <script src="/static/js/physics.js?v=3.10"></script>
-    <script src="/static/js/machines.js?v=3.10"></script>
-    <script src="/static/js/connections.js?v=3.10"></script>
-    <script src="/static/js/animations.js?v=3.10"></script>
-    <script src="/static/js/internal.js?v=3.10"></script>
-    <script src="/static/js/navigation.js?v=3.10"></script>
-    <script src="/static/js/ui.js?v=3.10"></script>
-    <script src="/static/js/app.js?v=3.10"></script>
+    <!-- App modules (v4.0 - Dual visualization views) -->
+    <script src="/static/js/config.js?v=4.0"></script>
+    <script src="/static/js/websocket.js?v=4.0"></script>
+    <script src="/static/js/scene.js?v=4.0"></script>
+    <script src="/static/js/physics.js?v=4.0"></script>
+    <script src="/static/js/machines.js?v=4.0"></script>
+    <script src="/static/js/connections.js?v=4.0"></script>
+    <script src="/static/js/animations.js?v=4.0"></script>
+    <script src="/static/js/internal.js?v=4.0"></script>
+    <script src="/static/js/navigation.js?v=4.0"></script>
+    <script src="/static/js/ui.js?v=4.0"></script>
+
+    <!-- New view modules -->
+    <script src="/static/js/view-machine.js?v=4.0"></script>
+    <script src="/static/js/view-area.js?v=4.0"></script>
+    <script src="/static/js/view-manager.js?v=4.0"></script>
+
+    <script src="/static/js/app.js?v=4.0"></script>
 </body>
 </html>
