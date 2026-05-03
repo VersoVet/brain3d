@@ -147,7 +147,7 @@ app.include_router(router)
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Any) -> Any:
+async def index(request: Request) -> HTMLResponse:
     """Main page.
 
     Returns:
@@ -160,46 +160,6 @@ async def index(request: Any) -> Any:
             "title": "Brain3D - Onyx Visualizer",
         },
     )
-
-
-@app.post("/api/metrics/{node_id}")
-async def receive_metrics(node_id: str, request: Request) -> dict[str, Any]:
-    """Receive and process metrics for a machine.
-
-    Args:
-        node_id: Machine node ID.
-        request: HTTP request with metrics payload.
-
-    Returns:
-        Metrics processing result.
-    """
-    onyx = getattr(app.state, "onyx", None)
-    onyx.working(f"metrics: {node_id}") if onyx else None
-
-    try:
-        state_manager = app.state.state_manager
-        ws_manager = app.state.ws_manager
-        data = await request.json()
-        metrics = data.get("metrics", {})
-
-        if state_manager:
-            machine = state_manager.get_machine(node_id)
-            if machine:
-                if "cpu_percent" in metrics:
-                    machine.metrics.cpu_percent = float(metrics.get("cpu_percent", 0))
-                if "ram_percent" in metrics:
-                    machine.metrics.ram_percent = float(metrics.get("ram_percent", 0))
-                if "disk_percent" in metrics:
-                    machine.metrics.disk_percent = float(metrics.get("disk_percent", 0))
-                await ws_manager.broadcast_metrics_update(node_id, metrics)
-
-        onyx.done() if onyx else None
-        return {"success": True, "node_id": node_id, "metrics_processed": len(metrics)}
-
-    except Exception as e:
-        onyx.error(str(e)) if onyx else None
-        onyx.done() if onyx else None
-        return {"success": False, "error": str(e)}
 
 
 def main():
