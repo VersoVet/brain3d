@@ -18,7 +18,8 @@ from fastapi.responses import JSONResponse
 def _get_version() -> str:
     """Read version from manifest.json."""
     try:
-        manifest_path = Path(__file__).parent.parent.parent / "manifest.json"
+        # From src/modules/api/routes.py -> up to project root
+        manifest_path = Path(__file__).parent.parent.parent.parent / "manifest.json"
         if manifest_path.exists():
             with open(manifest_path) as f:
                 data = json.load(f)
