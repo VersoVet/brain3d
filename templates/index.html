@@ -46,15 +46,6 @@
             <button id="btn-refresh" title="Refresh">🔄</button>
         </div>
 
-        <!-- Info Panel (machine/skill details) -->
-        <div id="info-panel" class="panel hidden">
-            <div class="panel-header">
-                <span id="panel-title">Details</span>
-                <button id="btn-close-panel">×</button>
-            </div>
-            <div id="panel-content"></div>
-        </div>
-
         <!-- Stats Panel -->
         <div id="stats-panel" class="panel">
             <div class="stat">
@@ -66,7 +57,7 @@
                 <span id="stat-skills" class="stat-value">0</span>
             </div>
             <div class="stat">
-                <span class="stat-label">Up</span>
+                <span class="stat-label">UP</span>
                 <span id="stat-up" class="stat-value status-up">0</span>
             </div>
             <div class="stat">
@@ -79,67 +70,31 @@
             </div>
         </div>
 
-        <!-- Legend - Machines -->
-        <div id="legend" class="panel">
-            <div class="legend-section">
-                <h4>Machines</h4>
-                <div class="legend-item">
-                    <span class="legend-shape icosa cyan electrons"></span>
-                    <span>Core (OnyxSoma)</span>
+        <!-- Machine Panel (right side) -->
+        <div id="machine-panel" class="hidden">
+            <div id="mp-header">
+                <div id="mp-title">
+                    <span id="mp-icon">🖥</span>
+                    <span id="mp-hostname">—</span>
                 </div>
-                <div class="legend-item">
-                    <span class="legend-shape torus violet"></span>
-                    <span>Forge (OnyxDendrite)</span>
+                <button id="mp-close">×</button>
+            </div>
+            <div id="mp-meta">
+                <div class="mp-row">
+                    <span class="mp-label">IP</span>
+                    <span id="mp-ip">—</span>
                 </div>
-                <div class="legend-item">
-                    <span class="legend-shape cube green"></span>
-                    <span>Heart Machine</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-shape sphere blue"></span>
-                    <span>Network Device</span>
+                <div class="mp-row">
+                    <span class="mp-label">Statut</span>
+                    <span id="mp-status"><span id="mp-status-dot">●</span> <span id="mp-status-text">—</span></span>
                 </div>
             </div>
-            <div class="legend-section">
-                <h4>Connexions</h4>
-                <div class="legend-item">
-                    <span class="legend-line vip-tube"></span>
-                    <span>VIP Keepalived</span>
+            <div id="mp-skills-section">
+                <div id="mp-skills-header">
+                    Skills <span id="mp-skills-count"></span>
                 </div>
-                <div class="legend-item">
-                    <span class="legend-line forge-line"></span>
-                    <span>Forge → Core</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-line heart-line"></span>
-                    <span>Heart → Heart</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-line network-line"></span>
-                    <span>Network</span>
-                </div>
+                <div id="mp-skills-list"></div>
             </div>
-            <div class="legend-section">
-                <h4>Messages</h4>
-                <div class="legend-item">
-                    <span class="legend-particle heartbeat"></span>
-                    <span>Heartbeat</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-particle skill-event"></span>
-                    <span>Skill Event</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-particle error"></span>
-                    <span>Erreur</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Breadcrumb (navigation) -->
-        <div id="breadcrumb" class="hidden">
-            <span id="breadcrumb-path"></span>
-            <button id="btn-back">← Back</button>
         </div>
     </div>
 

@@ -1,443 +1,163 @@
 /**
- * Brain3D - UI Manager
+ * Brain3D - UI Manager v5.0
+ *
+ * Manages stats panel and right-side machine info panel.
  */
 
 class UIManager {
     constructor() {
-        this.elements = {
-            statsPanel: document.getElementById('stats-panel'),
-            infoPanel: document.getElementById('info-panel'),
-            panelTitle: document.getElementById('panel-title'),
-            panelContent: document.getElementById('panel-content'),
-            breadcrumb: document.getElementById('breadcrumb'),
-            breadcrumbPath: document.getElementById('breadcrumb-path'),
-            statMachines: document.getElementById('stat-machines'),
-            statSkills: document.getElementById('stat-skills'),
-            statUp: document.getElementById('stat-up'),
-            statWorking: document.getElementById('stat-working'),
-            statError: document.getElementById('stat-error'),
-        };
+        this._panel = document.getElementById('machine-panel');
+        this._hostname = document.getElementById('mp-hostname');
+        this._icon = document.getElementById('mp-icon');
+        this._ip = document.getElementById('mp-ip');
+        this._statusDot = document.getElementById('mp-status-dot');
+        this._statusText = document.getElementById('mp-status-text');
+        this._skillsList = document.getElementById('mp-skills-list');
+        this._skillsCount = document.getElementById('mp-skills-count');
 
+        this._statMachines = document.getElementById('stat-machines');
+        this._statSkills = document.getElementById('stat-skills');
+        this._statUp = document.getElementById('stat-up');
+        this._statWorking = document.getElementById('stat-working');
+        this._statError = document.getElementById('stat-error');
+
+        this._currentNodeId = null;
+
+        document.getElementById('mp-close')?.addEventListener('click', () => this.hidePanel());
         this._setupControls();
     }
 
     _setupControls() {
-        // Reset view
         document.getElementById('btn-reset-view')?.addEventListener('click', () => {
             scene3d?.resetView();
         });
-
-        // Toggle auto-rotate
         document.getElementById('btn-toggle-rotate')?.addEventListener('click', (e) => {
             const active = scene3d?.toggleAutoRotate();
             e.target.classList.toggle('active', active);
         });
-
-        // Refresh
         document.getElementById('btn-refresh')?.addEventListener('click', () => {
             wsClient.requestRefresh();
         });
-
-        // Close panel
-        document.getElementById('btn-close-panel')?.addEventListener('click', () => {
-            this.hideInfoPanel();
-        });
     }
 
+    /**
+     * Update stats panel from network state.
+     *
+     * Args:
+     *     state: NetworkState object
+     */
     updateStats(state) {
         if (!state) return;
-
-        if (this.elements.statMachines) {
-            this.elements.statMachines.textContent = state.total_machines || 0;
-        }
-        if (this.elements.statSkills) {
-            this.elements.statSkills.textContent = state.total_skills || 0;
-        }
-        if (this.elements.statUp) {
-            this.elements.statUp.textContent = state.skills_up || 0;
-        }
-        if (this.elements.statWorking) {
-            this.elements.statWorking.textContent = state.skills_working || 0;
-        }
-        if (this.elements.statError) {
-            this.elements.statError.textContent = state.skills_error || 0;
-        }
-    }
-
-    showMachineInfo(machine) {
-        if (!machine) return;
-
-        if (this.elements.panelTitle) {
-            const icon = this._getMachineIcon(machine.machine_type);
-            this.elements.panelTitle.innerHTML = `${icon} ${machine.hostname || machine.node_id}`;
-        }
-
-        if (this.elements.panelContent) {
-            const statusClass = `status-${(machine.status || 'unknown').toLowerCase()}`;
-            const typeLabel = this._getTypeLabel(machine.machine_type);
-
-            this.elements.panelContent.innerHTML = `
-                <div class="info-row">
-                    <span class="info-label">Status</span>
-                    <span class="info-value ${statusClass}">${machine.status || 'Unknown'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Type</span>
-                    <span class="info-value">${typeLabel}</span>
-                </div>
-                ${machine.role ? `
-                <div class="info-row">
-                    <span class="info-label">Role</span>
-                    <span class="info-value" style="font-size: 11px;">${machine.role}</span>
-                </div>
-                ` : ''}
-                <div class="info-row">
-                    <span class="info-label">IP</span>
-                    <span class="info-value">${machine.ip || 'N/A'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Platform</span>
-                    <span class="info-value">${machine.platform || 'Unknown'}</span>
-                </div>
-                ${machine.has_heart ? `
-                <div class="info-row">
-                    <span class="info-label">Heart</span>
-                    <span class="info-value" style="color: #00ff88;">v${machine.heart_version || '?'}</span>
-                </div>
-                ` : ''}
-                ${machine.skills_count > 0 ? `
-                <div class="info-row">
-                    <span class="info-label">Skills</span>
-                    <span class="info-value">${machine.skills_installed || 0} / ${machine.skills_count}</span>
-                </div>
-                ` : ''}
-                ${machine.wol_enabled ? `
-                <div class="info-row">
-                    <span class="info-label">Wake-on-LAN</span>
-                    <span class="info-value" style="color: #00d4aa;">Enabled</span>
-                </div>
-                ` : ''}
-                ${machine.mac ? `
-                <div class="info-row">
-                    <span class="info-label">MAC</span>
-                    <span class="info-value" style="font-size: 10px; font-family: monospace;">${machine.mac}</span>
-                </div>
-                ` : ''}
-                ${machine.metrics && this._hasMetrics(machine.metrics) ? this._renderMetrics(machine.metrics) : ''}
-                ${machine.has_heart ? this._renderActions(machine) : ''}
-            `;
-        }
-
-        if (this.elements.infoPanel) {
-            this.elements.infoPanel.classList.remove('hidden');
-        }
-    }
-
-    _getMachineIcon(type) {
-        const icons = {
-            core: '🧠',
-            forge: '🔨',
-            heart: '💚',
-            network: '🌐',
-            proxy_target: '👁️',
-        };
-        return icons[type] || '📦';
-    }
-
-    _getTypeLabel(type) {
-        const labels = {
-            core: 'Core (OnyxSoma)',
-            forge: 'Forge (Dev)',
-            heart: 'Heart Node',
-            network: 'Network Device',
-            proxy_target: 'Proxy Target',
-        };
-        return labels[type] || type || 'Unknown';
-    }
-
-    _hasMetrics(metrics) {
-        return metrics && (metrics.cpu_percent > 0 || metrics.ram_percent > 0 || metrics.disk_percent > 0);
-    }
-
-    _renderActions(machine) {
-        return `
-            <div class="panel-actions">
-                <button class="action-btn" onclick="wsClient.requestRefresh()" title="Refresh">🔄 Refresh</button>
-            </div>
-        `;
-    }
-
-    _renderMetrics(metrics) {
-        return `
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-value">${Math.round(metrics.cpu_percent || 0)}%</div>
-                    <div class="metric-label">CPU</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value">${Math.round(metrics.ram_percent || 0)}%</div>
-                    <div class="metric-label">RAM</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value">${Math.round(metrics.disk_percent || 0)}%</div>
-                    <div class="metric-label">Disk</div>
-                </div>
-                ${metrics.temp_celsius ? `
-                <div class="metric-card">
-                    <div class="metric-value">${Math.round(metrics.temp_celsius)}°C</div>
-                    <div class="metric-label">Temp</div>
-                </div>
-                ` : ''}
-            </div>
-        `;
-    }
-
-    hideInfoPanel() {
-        if (this.elements.infoPanel) {
-            this.elements.infoPanel.classList.add('hidden');
-        }
-    }
-
-    showBreadcrumb(path) {
-        if (this.elements.breadcrumbPath) {
-            this.elements.breadcrumbPath.textContent = `Network / ${path}`;
-        }
-        if (this.elements.breadcrumb) {
-            this.elements.breadcrumb.classList.remove('hidden');
-        }
-    }
-
-    hideBreadcrumb() {
-        if (this.elements.breadcrumb) {
-            this.elements.breadcrumb.classList.add('hidden');
-        }
-    }
-
-    showNotification(message, type = 'info') {
-        // TODO: Implement toast notifications
-        console.log(`[${type}] ${message}`);
+        if (this._statMachines) this._statMachines.textContent = state.total_machines ?? 0;
+        if (this._statSkills)   this._statSkills.textContent   = state.total_skills ?? 0;
+        if (this._statUp)       this._statUp.textContent       = state.skills_up ?? 0;
+        if (this._statWorking)  this._statWorking.textContent  = state.skills_working ?? 0;
+        if (this._statError)    this._statError.textContent    = state.skills_error ?? 0;
     }
 
     /**
-     * Show skill details.
-     *
-     * Args:
-     *     skill: Skill object
-     *     machineName: optional machine hostname
-     */
-    showSkillInfo(skill, machineName = null) {
-        if (!skill) return;
-
-        if (this.elements.panelTitle) {
-            this.elements.panelTitle.innerHTML = `📦 ${skill.name}`;
-        }
-
-        if (this.elements.panelContent) {
-            const statusClass = `status-${(skill.status || 'unknown').toLowerCase()}`;
-            this.elements.panelContent.innerHTML = `
-                <div class="info-row">
-                    <span class="info-label">Status</span>
-                    <span class="info-value ${statusClass}">${skill.status || 'Unknown'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Version</span>
-                    <span class="info-value">${skill.version || 'N/A'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Brain Area</span>
-                    <span class="info-value">${skill.brain_area || 'N/A'}</span>
-                </div>
-                ${machineName ? `
-                <div class="info-row">
-                    <span class="info-label">Machine</span>
-                    <span class="info-value">${machineName}</span>
-                </div>
-                ` : ''}
-                ${skill.port ? `
-                <div class="info-row">
-                    <span class="info-label">Port</span>
-                    <span class="info-value" style="font-family: monospace;">${skill.port}</span>
-                </div>
-                ` : ''}
-            `;
-        }
-
-        if (this.elements.infoPanel) {
-            this.elements.infoPanel.classList.remove('hidden');
-        }
-    }
-
-    /**
-     * Show brain area details.
-     *
-     * Args:
-     *     area: Area object
-     *     skills: Array of Skill objects in this area
-     */
-    showAreaInfo(area, skills = []) {
-        if (!area) return;
-
-        if (this.elements.panelTitle) {
-            this.elements.panelTitle.innerHTML = `🧠 ${area.name || area.id}`;
-        }
-
-        if (this.elements.panelContent) {
-            const statusClass = `status-${(area.status || 'unknown').toLowerCase()}`;
-            const activeCount = skills.filter((s) => s.status === 'UP').length;
-
-            this.elements.panelContent.innerHTML = `
-                <div class="info-row">
-                    <span class="info-label">Status</span>
-                    <span class="info-value ${statusClass}">${area.status || 'Unknown'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Skills</span>
-                    <span class="info-value">${activeCount}/${skills.length}</span>
-                </div>
-                ${skills.length > 0 ? `
-                <div class="info-section">
-                    <h4 style="margin: 8px 0 4px 0; font-size: 12px;">Skills</h4>
-                    ${skills.map((s) => `
-                        <div style="font-size: 11px; margin: 2px 0; padding: 2px 4px; background: rgba(255,255,255,0.05); border-radius: 2px;">
-                            <span style="color: ${this._getStatusColor(s.status)};">●</span> ${s.name} (${s.status})
-                        </div>
-                    `).join('')}
-                </div>
-                ` : ''}
-            `;
-        }
-
-        if (this.elements.infoPanel) {
-            this.elements.infoPanel.classList.remove('hidden');
-        }
-    }
-
-    /**
-     * Show machine skills panel (network view).
+     * Show machine info panel with skills list.
      *
      * Args:
      *     machineData: userData from Three.js mesh
      */
     showMachineSkills(machineData) {
         if (!machineData) return;
+        this._currentNodeId = machineData.nodeId;
 
-        const icon = machineData.isCore ? '🧠' : '🖥️';
-        if (this.elements.panelTitle) {
-            this.elements.panelTitle.innerHTML = `${icon} ${machineData.hostname}`;
+        // Header
+        this._icon.textContent = machineData.isCore ? '🧠' : '🖥';
+        this._hostname.textContent = machineData.hostname || machineData.nodeId;
+
+        // Meta
+        this._ip.textContent = machineData.ip || '—';
+        const norm = this._normalizeStatus(machineData.status);
+        this._statusDot.style.color = this._statusColor(norm);
+        this._statusDot.textContent = '●';
+        this._statusText.textContent = norm;
+        this._statusText.style.color = this._statusColor(norm);
+
+        // Skills
+        const skills = machineData.local_skills || [];
+        this._skillsCount.textContent = skills.length ? `(${skills.length})` : '';
+        this._skillsList.innerHTML = '';
+
+        if (skills.length === 0) {
+            this._skillsList.innerHTML = '<div style="padding:12px 16px; color:#444; font-size:12px;">Aucun skill déployé</div>';
+        } else {
+            skills.forEach((s) => {
+                const norm = this._normalizeStatus(s.status);
+                const color = this._statusColor(norm);
+                const row = document.createElement('div');
+                row.className = 'skill-row';
+                row.dataset.skill = s.name;
+                row.innerHTML = `
+                    <span class="skill-dot" style="color:${color}">●</span>
+                    <span class="skill-name" title="${s.name}">${s.name}</span>
+                    <span class="skill-status" style="color:${color}">${norm}</span>`;
+                this._skillsList.appendChild(row);
+            });
         }
 
-        if (this.elements.panelContent) {
-            const skills = machineData.local_skills || [];
-            const statusClass = `status-${(machineData.status || 'unknown').toLowerCase()}`;
-
-            let skillsHtml = '';
-            if (skills.length === 0) {
-                skillsHtml = '<div style="color:#888; font-size:12px; margin-top:8px;">Aucun skill déployé</div>';
-            } else {
-                skillsHtml = `
-                    <div class="info-section" style="margin-top:8px;">
-                        <h4 style="margin:0 0 6px 0; font-size:12px; color:#aaa;">Skills déployés</h4>
-                        ${skills.map((s) => {
-                            const norm = this._normalizeStatus(s.status);
-                            const color = this._getStatusColor(norm);
-                            return `
-                                <div data-skill="${s.name}" style="display:flex; justify-content:space-between; align-items:center;
-                                    font-size:12px; margin:3px 0; padding:3px 6px;
-                                    background:rgba(255,255,255,0.04); border-radius:3px;">
-                                    <span><span style="color:${color};">●</span> ${s.name}</span>
-                                    <span style="color:${color}; font-size:10px;">${norm}</span>
-                                </div>`;
-                        }).join('')}
-                    </div>`;
-            }
-
-            this.elements.panelContent.innerHTML = `
-                <div class="info-row">
-                    <span class="info-label">Status</span>
-                    <span class="info-value ${statusClass}">${machineData.status || 'Unknown'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">IP</span>
-                    <span class="info-value">${machineData.ip || 'N/A'}</span>
-                </div>
-                ${skillsHtml}
-            `;
-        }
-
-        this._currentMachineData = machineData;
-        if (this.elements.infoPanel) {
-            this.elements.infoPanel.classList.remove('hidden');
-        }
+        this._panel.classList.remove('hidden');
     }
 
     /**
-     * Update a skill status in the currently open panel.
+     * Update a skill's status dot in the open panel.
      *
      * Args:
-     *     skillName: Skill name
+     *     skillName: Skill name string
      *     status: New status string
      */
     updateSkillStatus(skillName, status) {
-        if (!this._currentMachineData) return;
+        const row = this._skillsList?.querySelector(`[data-skill="${skillName}"]`);
+        if (!row) return;
         const norm = this._normalizeStatus(status);
-        const color = this._getStatusColor(norm);
-        const el = this.elements.panelContent?.querySelector(`[data-skill="${skillName}"]`);
-        if (el) {
-            el.innerHTML = `
-                <span><span style="color:${color};">●</span> ${skillName}</span>
-                <span style="color:${color}; font-size:10px;">${norm}</span>`;
-        }
+        const color = this._statusColor(norm);
+        const dot = row.querySelector('.skill-dot');
+        const st  = row.querySelector('.skill-status');
+        if (dot) dot.style.color = color;
+        if (st)  { st.textContent = norm; st.style.color = color; }
     }
 
     /**
-     * Normalize Heart/Core status to canonical form.
+     * Hide the machine panel.
+     */
+    hidePanel() {
+        this._panel.classList.add('hidden');
+        this._currentNodeId = null;
+    }
+
+    // Keep backward-compat alias used by network-view.js
+    hideInfoPanel() { this.hidePanel(); }
+
+    /**
+     * Normalize Heart/Core status to canonical uppercase form.
      *
      * Args:
      *     status: Raw status string
      *
      * Returns:
-     *     Canonical status (UP, DOWN, ERROR, WORKING)
+     *     Canonical status (UP, DOWN, ERROR, WORKING, UNKNOWN)
      */
     _normalizeStatus(status) {
-        const map = { running: 'UP', loaded: 'UP', stopped: 'DOWN', error: 'ERROR', unknown: 'DOWN' };
-        return map[status] || status || 'UNKNOWN';
+        const map = { running: 'UP', loaded: 'UP', stopped: 'DOWN', error: 'ERROR', unknown: 'UNKNOWN' };
+        if (!status) return 'UNKNOWN';
+        return map[status] || String(status).toUpperCase();
     }
 
     /**
-     * Get CSS color for status.
+     * Get CSS color string for a canonical status.
      *
      * Args:
-     *     status: Status string
+     *     status: Canonical status string
      *
      * Returns:
      *     CSS color value
      */
-    _getStatusColor(status) {
-        const colors = {
-            UP: '#00ff88',
-            WORKING: '#ff00ff',
-            DOWN: '#555555',
-            ERROR: '#ff8800',
-            UNKNOWN: '#666666',
-        };
-        return colors[status] || colors.UNKNOWN;
-    }
-
-    /**
-     * Set active view button.
-     *
-     * Args:
-     *     viewName: 'network' | 'machine' | 'area'
-     */
-    setActiveViewButton(viewName) {
-        document.querySelectorAll('#view-selector .view-btn').forEach((btn) => {
-            btn.classList.remove('active');
-        });
-        const btnId = `btn-view-${viewName}`;
-        const btn = document.getElementById(btnId);
-        if (btn) {
-            btn.classList.add('active');
-        }
+    _statusColor(status) {
+        const colors = { UP: '#00ff88', WORKING: '#ff00ff', DOWN: '#555', ERROR: '#ff8800', UNKNOWN: '#555' };
+        return colors[status] || '#666';
     }
 }
 
