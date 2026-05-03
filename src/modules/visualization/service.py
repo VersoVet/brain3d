@@ -1,34 +1,34 @@
-"""
-Brain3D visualization service module.
+"""Visualization service for Brain3D.
 
-Handles 3D visualization data aggregation, state management,
-and real-time updates via WebSocket and Redis.
+Provides convenience methods for accessing visualization data.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from src.state_manager import StateManager
 
 
 class VisualizationService:
-    """Service for managing 3D visualization state and updates."""
+    """Service for managing 3D visualization state."""
 
     def __init__(self, state_manager: StateManager) -> None:
         """Initialize visualization service.
 
         Args:
-            state_manager: State manager instance for data aggregation.
+            state_manager: State manager for data access.
         """
         self.state_manager = state_manager
 
-    async def get_visualization_state(self) -> Dict[str, Any]:
+    async def get_visualization_state(self) -> dict[str, Any]:
         """Get current visualization state.
 
         Returns:
-            Dictionary containing nodes, links, and metadata for visualization.
+            Network state with nodes and links for visualization.
         """
-        return await self.state_manager.get_full_state()
+        await self.state_manager.refresh_if_stale()
+        state = self.state_manager.get_network_state()
+        return state.model_dump(mode="json")
 
     async def refresh_state(self) -> None:
-        """Force refresh of all visualization data."""
-        await self.state_manager.load_and_aggregate_data()
+        """Force refresh of visualization data."""
+        await self.state_manager.refresh_all()

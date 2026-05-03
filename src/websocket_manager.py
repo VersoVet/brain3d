@@ -1,49 +1,48 @@
-"""Gestionnaire de connexions WebSocket"""
+"""Gestionnaire de connexions WebSocket."""
 
 import asyncio
-import json
+import contextlib
 import logging
-from datetime import datetime
-from typing import Dict, Set, Optional, Any
 from dataclasses import dataclass, field
+from datetime import datetime
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 
-from .config import WS_MAX_UPDATES_PER_SECOND, WS_HEARTBEAT_INTERVAL
-from .models import WSMessage
+from .config import WS_HEARTBEAT_INTERVAL, WS_MAX_UPDATES_PER_SECOND
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class ConnectedClient:
-    """Client WebSocket connecte"""
+    """Client WebSocket connecte."""
+
     websocket: WebSocket
     client_id: str
     connected_at: datetime = field(default_factory=datetime.now)
     view_mode: str = "network"  # network, internal
-    focused_machine: Optional[str] = None
-    focused_area: Optional[str] = None
-    subscriptions: Set[str] = field(default_factory=set)  # Types d'events souhaites
+    focused_machine: str | None = None
+    focused_area: str | None = None
+    subscriptions: set[str] = field(default_factory=set)  # Types d'events souhaites
 
 
 class WebSocketManager:
-    """Gestionnaire des connexions WebSocket"""
+    """Gestionnaire des connexions WebSocket."""
 
     def __init__(self):
-        self._connections: Dict[str, ConnectedClient] = {}
+        self._connections: dict[str, ConnectedClient] = {}
         self._lock = asyncio.Lock()
         self._message_queue: asyncio.Queue = asyncio.Queue()
         self._running = False
-        self._broadcast_task: Optional[asyncio.Task] = None
-        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._broadcast_task: asyncio.Task | None = None
+        self._heartbeat_task: asyncio.Task | None = None
 
         # Rate limiting
         self._last_broadcast = datetime.now()
         self._min_interval = 1.0 / WS_MAX_UPDATES_PER_SECOND
 
     async def connect(self, websocket: WebSocket, client_id: str) -> ConnectedClient:
-        """Accepte une nouvelle connexion WebSocket"""
+        """Accepte une nouvelle connexion WebSocket."""
         await websocket.accept()
 
         client = ConnectedClient(
@@ -58,7 +57,7 @@ class WebSocketManager:
         return client
 
     async def disconnect(self, client_id: str) -> None:
-        """Deconnecte un client"""
+        """Deconnecte un client."""
         async with self._lock:
             if client_id in self._connections:
                 del self._connections[client_id]
@@ -66,7 +65,7 @@ class WebSocketManager:
         logger.info(f"Client deconnecte: {client_id} (total: {len(self._connections)})")
 
     async def send_to_client(self, client_id: str, message: dict) -> bool:
-        """Envoie un message a un client specifique"""
+        """Envoie un message a un client specifique."""
         async with self._lock:
             client = self._connections.get(client_id)
 
@@ -81,8 +80,8 @@ class WebSocketManager:
             await self.disconnect(client_id)
             return False
 
-    async def broadcast(self, message: dict, exclude: Optional[Set[str]] = None) -> int:
-        """Broadcast un message a tous les clients"""
+    async def broadcast(self, message: dict, exclude: set[str] | None = None) -> int:
+        """Broadcast un message a tous les clients."""
         exclude = exclude or set()
         sent = 0
 
@@ -107,9 +106,9 @@ class WebSocketManager:
         target_type: str,  # skill, area, machine
         target_id: str,
         status: str,
-        data: Optional[dict] = None
+        data: dict | None = None,
     ) -> int:
-        """Broadcast une mise a jour de statut"""
+        """Broadcast une mise a jour de statut."""
         message = {
             "type": "status_update",
             "target": target_type,
@@ -120,12 +119,8 @@ class WebSocketManager:
         }
         return await self.broadcast(message)
 
-    async def broadcast_metrics_update(
-        self,
-        node_id: str,
-        metrics: dict
-    ) -> int:
-        """Broadcast une mise a jour de metriques"""
+    async def broadcast_metrics_update(self, node_id: str, metrics: dict) -> int:
+        """Broadcast une mise a jour de metriques."""
         message = {
             "type": "metrics_update",
             "node_id": node_id,
@@ -138,9 +133,9 @@ class WebSocketManager:
         self,
         action: str,  # add, remove, update
         entity_type: str,  # machine, skill, area
-        entity: dict
+        entity: dict,
     ) -> int:
-        """Broadcast un changement de topologie"""
+        """Broadcast un changement de topologie."""
         message = {
             "type": "topology_change",
             "action": action,
@@ -150,8 +145,10 @@ class WebSocketManager:
         }
         return await self.broadcast(message)
 
-    async def broadcast_redis_event(self, event_type: str, node: str, data: dict) -> int:
-        """Broadcast un événement Redis pour visualisation Message Bus"""
+    async def broadcast_redis_event(
+        self, event_type: str, node: str, data: dict
+    ) -> int:
+        """Broadcast un événement Redis pour visualisation Message Bus."""
         message = {
             "type": "redis_event",
             "event_type": event_type,
@@ -165,10 +162,10 @@ class WebSocketManager:
         self,
         client_id: str,
         view_mode: str,
-        machine_id: Optional[str] = None,
-        area_id: Optional[str] = None
+        machine_id: str | None = None,
+        area_id: str | None = None,
     ) -> bool:
-        """Met a jour le focus d'un client"""
+        """Met a jour le focus d'un client."""
         async with self._lock:
             client = self._connections.get(client_id)
             if not client:
@@ -181,13 +178,13 @@ class WebSocketManager:
         return True
 
     async def handle_client_message(self, client_id: str, data: dict) -> dict:
-        """Traite un message recu d'un client"""
+        """Traite un message recu d'un client."""
         msg_type = data.get("type", "")
 
         if msg_type == "ping":
             return {"type": "pong", "timestamp": datetime.now().isoformat()}
 
-        elif msg_type == "set_focus":
+        if msg_type == "set_focus":
             await self.set_client_focus(
                 client_id,
                 view_mode=data.get("view_mode", "network"),
@@ -196,7 +193,7 @@ class WebSocketManager:
             )
             return {"type": "focus_updated", "success": True}
 
-        elif msg_type == "subscribe":
+        if msg_type == "subscribe":
             # Ajouter des subscriptions
             async with self._lock:
                 client = self._connections.get(client_id)
@@ -205,7 +202,7 @@ class WebSocketManager:
                     client.subscriptions.update(events)
             return {"type": "subscribed", "events": list(data.get("events", []))}
 
-        elif msg_type == "unsubscribe":
+        if msg_type == "unsubscribe":
             # Retirer des subscriptions
             async with self._lock:
                 client = self._connections.get(client_id)
@@ -214,15 +211,14 @@ class WebSocketManager:
                     client.subscriptions.difference_update(events)
             return {"type": "unsubscribed", "events": list(data.get("events", []))}
 
-        elif msg_type == "refresh":
+        if msg_type == "refresh":
             # Demande de refresh - sera traite par le state manager
             return {"type": "refresh_requested"}
 
-        else:
-            return {"type": "error", "message": f"Unknown message type: {msg_type}"}
+        return {"type": "error", "message": f"Unknown message type: {msg_type}"}
 
     async def _heartbeat_loop(self) -> None:
-        """Envoie des heartbeats periodiques aux clients"""
+        """Envoie des heartbeats periodiques aux clients."""
         while self._running:
             try:
                 await asyncio.sleep(WS_HEARTBEAT_INTERVAL)
@@ -238,40 +234,36 @@ class WebSocketManager:
                 logger.error(f"Erreur heartbeat: {e}")
 
     async def start(self) -> None:
-        """Demarre les taches en arriere-plan"""
+        """Demarre les taches en arriere-plan."""
         self._running = True
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         logger.info("WebSocket manager demarre")
 
     async def stop(self) -> None:
-        """Arrete les taches en arriere-plan"""
+        """Arrete les taches en arriere-plan."""
         self._running = False
 
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._heartbeat_task
-            except asyncio.CancelledError:
-                pass
 
         # Fermer toutes les connexions
         async with self._lock:
-            for client_id, client in list(self._connections.items()):
-                try:
+            for _client_id, client in list(self._connections.items()):
+                with contextlib.suppress(BaseException):
                     await client.websocket.close()
-                except:
-                    pass
             self._connections.clear()
 
         logger.info("WebSocket manager arrete")
 
     @property
     def connection_count(self) -> int:
-        """Nombre de connexions actives"""
+        """Nombre de connexions actives."""
         return len(self._connections)
 
     def get_stats(self) -> dict:
-        """Statistiques des connexions"""
+        """Statistiques des connexions."""
         return {
             "total_connections": len(self._connections),
             "clients": [

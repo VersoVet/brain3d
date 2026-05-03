@@ -1,4 +1,6 @@
 {
+  "name": "brain3d",
+  "version": "3.1.0",
   "core": {
     "name": "brain3d",
     "type": "python",
@@ -47,7 +49,9 @@
     "repository": "VersoVet/brain3d",
     "development": {
       "progress_percent": 65,
-      "dev_status": "in_progress"
+      "dev_status": "in_progress",
+      "dev_platform": "dendrite",
+      "test_platform": "dendrite"
     },
     "python": {
       "src_dir": ".",
@@ -118,6 +122,11 @@
       "method": "GET",
       "path": "/api/areas",
       "description": "List of brain areas"
+    },
+    {
+      "method": "POST",
+      "path": "/api/metrics/{node_id}",
+      "description": "Receive and process metrics for a machine"
     },
     {
       "method": "POST",

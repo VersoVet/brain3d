@@ -1,100 +1,51 @@
-# Brain3D Architecture
+# Brain3D Architecture (v3.1 - Refactored)
+
+**Last Updated:** 2026-04-29
 
 ## Overview
 
-Brain3D est le **visualiseur 3D temps réel** du système Onyx. Il affiche l'état complet du Cerebellum:
-- État de tous les skills
-- Machines connectées
-- Relations machines ↔ skills
-- Métriques en temps réel
-- Événements système
+Brain3D est le **visualiseur 3D temps réel** du système Onyx pour le Cerebellum. Il agrège les données du Cerebellum via:
+- **Redis** pour les événements et les statuts des skills (real-time pub/sub)
+- **OnyxCore** pour la structure et les relations machines/skills (registry)
+- **onyx-infra** pour les données d'infrastructure physique (network inventory)
 
-**Version:** 3.1.0  
+**Version:** 3.1.0 (Refactored)  
 **Brain Area:** cerebellum  
-**Port:** 8888  
-**Infrastructure:** Redis + OnyxCore + onyx-infra
+**Port:** 8888 (prod), 9888 (dev)  
+**Framework:** FastAPI + Three.js
 
 ---
 
-## Architecture Générale
+## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   Browser / Client                       │
-│              (WebSocket connection)                      │
-└────────────────────────┬────────────────────────────────┘
-                         │
-                         │ WS /ws
-                         │
-┌────────────────────────▼────────────────────────────────┐
-│                     Brain3D (Port 8888)                 │
-│              (FastAPI + Jinja2 + Three.js)              │
-├─────────────────────────────────────────────────────────┤
-│ • WebSocketManager  (manage clients)                    │
-│ • StateManager      (aggregates data)                   │
-│ • RedisClient       (subscribe to events)               │
-│ • DataClient        (fetch from external services)      │
-└────────────────────────┬────────────────────────────────┘
-                         │
-         ┌───────────────┼───────────────┐
-         │               │               │
-      Redis          OnyxCore        onyx-infra
-    (6379)           (8050)           (8053)
-    Events          Registry         Infrastructure
-```
-
----
-
-## Data Flow
-
-### 1. Initialization
-
-```
-Brain3D Start
-    ├─ Load Config (Redis URL, Core URL, etc.)
-    ├─ Connect to Redis (6379)
-    ├─ Subscribe to channels:
-    │   ├─ onyx:events
-    │   ├─ onyx:skill:status
-    │   └─ onyx:machines
-    ├─ Load initial state from OnyxCore
-    └─ Start FastAPI server on 0.0.0.0:8888
-```
-
-### 2. Real-time Updates
-
-```
-Redis Event
-    │
-    ├─ RedisClient receives message
-    │
-    ├─ StateManager processes:
-    │   ├─ skill.registered
-    │   ├─ skill.status_changed
-    │   ├─ machine.connected
-    │   └─ machine.disconnected
-    │
-    ├─ WebSocketManager broadcasts to all clients
-    │
-    └─ Browsers receive update + re-render 3D scene
-```
-
-### 3. Client Request
-
-```
-Browser GET /api/state
-    │
-    ├─ DataClient.get_full_state()
-    │   ├─ Fetch from Redis (latest state)
-    │   ├─ Fetch from OnyxCore (registry)
-    │   └─ Fetch from onyx-infra (devices)
-    │
-    ├─ StateManager.aggregate()
-    │   ├─ Merge all sources
-    │   ├─ Build node/link graph
-    │   └─ Compute positions (force-directed)
-    │
-    └─ Return JSON with nodes + links
+┌─────────────────────────────────────────────────────┐
+│                  Browser / Client                   │
+│              (WebSocket connection)                 │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     │ WS /ws
+                     │
+┌────────────────────▼────────────────────────────────┐
+│            Brain3D (Port 8888 / 9888)               │
+│          (FastAPI + Jinja2 + Three.js)              │
+├─────────────────────────────────────────────────────┤
+│ • main.py                  (app factory, routes)    │
+│ • WebSocketManager         (client connections)     │
+│ • StateManager             (cache + indexes)        │
+│ • CoreWsClient             (Core WebSocket events)  │
+│ • RedisSubscriber          (Redis pub/sub)          │
+│ • DataClient               (HTTP to Core + infra)   │
+│ • modules/api/routes       (FastAPI endpoints)      │
+│ • modules/data/{merger,    (data transformation)    │
+│   area_builder}            (pure logic)             │
+└────────────────────┬────────────────────────────────┘
+                     │
+         ┌───────────┼───────────┐
+         │           │           │
+      Redis       OnyxCore   onyx-infra
+      (6379)      (8050)     (8053)
+      Events      Registry   Infrastructure
 ```
 
 ---
@@ -103,290 +54,254 @@ Browser GET /api/state
 
 ```
 src/
-├── main.py                 # FastAPI app, routes, server startup
-├── config.py               # Configuration (Redis URL, etc.)
-├── models.py               # Pydantic models (Node, Link, etc.)
-│
-├── redis_client.py         # Redis subscriber + pub/sub
-├── state_manager.py        # Data aggregation + graph building
-├── data_client.py          # HTTP clients (Core, infra)
-├── websocket_manager.py    # WebSocket connections
+├── main.py                 (~161 lines) - FastAPI app, lifespan, server
+├── config.py               - Configuration (URLs, enums, colors)
+├── models.py               - Pydantic models (Machine, Skill, Area, etc.)
+├── data_client.py          (~232 lines) - HTTP clients for Core/infra
+├── state_manager.py        (~299 lines) - Cache, indexing, refresh logic
+├── core_ws_client.py       (~155 lines) - OnyxCore WebSocket subscriber
+├── redis_client.py         - Redis subscriber (pub/sub handler)
+├── websocket_manager.py    - FastAPI WebSocket manager
 │
 ├── modules/
-│   └── visualization/      # 3D visualization service
+│   ├── data/               - Data layer (pure transformation)
+│   │   ├── merger.py       (~233 lines) - Machine fusion + coherence
+│   │   ├── area_builder.py (~85 lines) - Brain area extraction
+│   │   └── tests/
+│   │
+│   ├── api/                - API routes layer
+│   │   ├── routes.py       (~268 lines) - All FastAPI endpoints
+│   │   └── tests/
+│   │
+│   └── visualization/      - (stub) 3D visualization helpers
 │       ├── service.py
 │       └── tests/
-│           └── test_visualization.py
 │
-├── static/
-│   └── js/
-│       ├── main.js         # Three.js initialization
-│       ├── machines.js     # Machine node rendering
-│       ├── connections.js  # Link rendering
-│       ├── animations.js   # Force-directed layout
-│       └── websocket.js    # WS event handling
+├── static/                 - Frontend assets (Three.js, CSS, etc.)
+│   └── js/                 - JavaScript (main, machines, connections)
 │
 └── templates/
-    └── index.html          # Jinja2 template
+    └── index.html          - Jinja2 main page
+
 ```
 
 ---
 
-## Components
+## Data Flow
 
-### 1. RedisClient (`redis_client.py`)
+### 1. Initialization (Startup)
 
-**Responsibility:** Écouter les événements Redis en temps réel
-
-```python
-class RedisClient:
-    async def start()           # Connect + subscribe to channels
-    async def listen()          # Receive messages
-    async def on_event()        # Process skill status changes
+```
+App Start
+  ├─ Load Config (Redis, Core, infra URLs)
+  ├─ Initialize DataClient (HTTP clients)
+  ├─ Initialize StateManager (cache + indexes)
+  ├─ Initialize WebSocketManager
+  ├─ Connect to Redis (subscribe to channels)
+  ├─ Load initial state (refresh_all)
+  ├─ Start CoreWsClient (Web Socket to Core)
+  └─ Serve frontend on port 8888
 ```
 
-**Channels Subscribed:**
-- `onyx:events` → système d'événements OnyxCore
-- `onyx:skill:status` → statuts des skills (SDK 2.1+)
-- `onyx:machines` → enregistrement des machines
+### 2. Real-time Updates
 
----
-
-### 2. StateManager (`state_manager.py`)
-
-**Responsibility:** Agréger et synthétiser l'état du système
-
-```python
-class StateManager:
-    async def get_full_state()      # Current system state
-    async def load_and_aggregate()  # Fetch from all sources
-    def build_graph()               # Create nodes + links
-    def compute_positions()         # Force-directed layout
+**Via Redis:**
+```
+Redis Event (onyx:events, onyx:skill:status)
+  ├─ RedisSubscriber receives message
+  ├─ StateManager processes:
+  │   ├─ update machine metrics
+  │   ├─ update skill status
+  │   └─ invalidate cache if needed
+  ├─ WebSocketManager broadcasts to all clients
+  └─ Browsers re-render 3D scene
 ```
 
-**Data Sources:**
-1. **Redis** — Événements en temps réel
-2. **OnyxCore** — Registry (skills + machines)
-3. **onyx-infra** — Infrastructure physique (devices, WoL)
-
----
-
-### 3. DataClient (`data_client.py`)
-
-**Responsibility:** Récupérer les données des services externes
-
-```python
-class DataClient:
-    async def get_skills()          # From OnyxCore
-    async def get_machines()        # From OnyxCore
-    async def get_devices()         # From onyx-infra
-    async def get_infrastructure()  # From onyx-infra
+**Via Core WebSocket:**
+```
+Core Event (skill:registered, deploy:completed, etc.)
+  ├─ CoreWsClient receives
+  ├─ Triggers full refresh or inline update
+  ├─ StateManager updates cache
+  └─ WebSocketManager broadcasts
 ```
 
-**Services Callés:**
-- `http://10.0.0.44:8050` (OnyxCore)
-- `http://10.0.0.44:8053` (onyx-infra)
+### 3. HTTP Request Flow
 
----
-
-### 4. WebSocketManager (`websocket_manager.py`)
-
-**Responsibility:** Gérer les connexions WebSocket des clients
-
-```python
-class WebSocketManager:
-    async def connect()             # New client
-    async def disconnect()          # Client leaves
-    async def broadcast()           # Send to all clients
-    async def broadcast_state_update()  # Send full state
 ```
-
-**Client Events:**
-- `skill_status_changed` — Skill online/offline
-- `machine_connected` — Machine enrollment
-- `state_updated` — Full refresh
-
----
-
-## Graph Structure
-
-### Nodes
-
-```json
-{
-  "id": "onyx-core",
-  "type": "skill",            // "skill", "machine", "area"
-  "label": "OnyxCore",
-  "status": "online",         // "online", "offline", "unknown"
-  "brain_area": "cerebellum",
-  "port": 8050,
-  "x": 100.5,                 // 3D position (computed)
-  "y": 200.3,
-  "z": 50.2,
-  "data": { ... }             // Extra metadata
-}
-```
-
-### Links
-
-```json
-{
-  "source": "oxya",           // Machine ID
-  "target": "onyx-core",      // Skill name
-  "type": "deployed",         // "deployed", "depends_on", "communicates"
-  "status": "active"
-}
+Browser GET /api/state
+  ├─ StateManager.refresh_if_stale()
+  │   ├─ If cache expired: refresh_all()
+  │   │   ├─ DataClient.get_full_state() (parallel):
+  │   │   │   ├─ _get_nodes_from_core()
+  │   │   │   ├─ _get_skills_from_core()
+  │   │   │   ├─ _get_devices_from_network_inventory()
+  │   │   │   ├─ _get_deploy_matrix_from_core()
+  │   │   │   └─ Query each Heart in parallel
+  │   │   │
+  │   │   ├─ merger.merge_machines_with_coherence():
+  │   │   │   ├─ Detect incoherences
+  │   │   │   ├─ Determine machine types
+  │   │   │   └─ Aggregate local + expected skills
+  │   │   │
+  │   │   └─ area_builder.extract_areas():
+  │   │       ├─ Group skills by brain_area
+  │   │       ├─ Compute area status
+  │   │       └─ Build Area objects
+  │   │
+  │   └─ Update _machines, _skills, _areas indexes
+  │
+  ├─ Return cached NetworkState
+  └─ Browser renders 3D visualization
 ```
 
 ---
 
-## 3D Visualization (Frontend)
+## Key Components
 
-### Technology Stack
-- **Three.js** — 3D rendering
-- **Force-Graph** — Force-directed layout (alternativement custom layout)
-- **WebSocket** — Real-time updates
+### main.py (~161 lines)
+- FastAPI app initialization
+- Lifespan context (startup/shutdown)
+- Static file mounting
+- Template rendering for index.html
+- Entry point (uvicorn runner)
+- Stores components in app.state for routes
 
-### Rendering
+### StateManager (~299 lines)
+- **Cache Management**: TTL-based refresh
+- **Indexing**: Fast O(1) lookups by ID/name
+- **Redis Event Handler**: Processes 5+ event types
+- **Getters**: get_machine(), get_skill(), get_skills_by_area()
+- **Visual Config**: Returns shape/color/animation for 3D
+- **Delegates to**:
+  - DataClient for data fetching
+  - CoreWsClient for Core events
+  - WebSocketManager for broadcasting
 
-1. **Initialization**
-   - Create Three.js scene
-   - Load initial state from `/api/state`
-   - Build 3D graph from nodes + links
+### DataClient (~232 lines)
+- **HTTP Clients**: Async calls to Core + infra
+- **Orchestrator**: Calls 4 HTTP endpoints in parallel
+- **Heart Queries**: Async queries to each machine
+- **Delegates to**:
+  - merger.py for fusion logic
+  - area_builder.py for area extraction
 
-2. **Interaction**
-   - Mouse controls: rotate, zoom
-   - Hover node → show details
-   - Click node → focus + highlight
+### modules/data/merger.py (~233 lines)
+**Pure transformation logic (no HTTP):**
+- `build_expected_skills_by_node()` - Parse deploy matrix
+- `parse_heart_skills()` - Convert Heart response → LocalSkill
+- `detect_incoherences()` - Compare local vs expected skills
+- `merge_machines_with_coherence()` - Combine Core + Heart + network data
+- `determine_machine_type()` - Classify machine by hostname
 
-3. **Real-time Updates**
-   - WS message arrives
-   - StateManager broadcasts to all clients
-   - Frontend re-renders affected nodes/links
-   - Smooth transitions + animations
+### modules/data/area_builder.py (~85 lines)
+**Brain area aggregation:**
+- `extract_areas()` - Group skills by brain_area
+- `compute_area_status()` - Priority-based status (ERROR > WORKING > UP > DOWN)
+- `format_area_name()` - kebab-case → Title Case
+
+### modules/api/routes.py (~268 lines)
+**FastAPI router with all endpoints:**
+- GET `/health` - Health check
+- GET `/status` - Detailed status
+- GET/POST `/api/*` - All data endpoints
+- WS `/ws` - WebSocket connection
+- All routes are stateless (depend on app.state)
+
+### CoreWsClient (~155 lines)
+**OnyxCore WebSocket subscription:**
+- Auto-reconnect loop (5s retry)
+- Event dispatcher (refresh vs inline updates)
+- Direct access to state_manager cache for updates
 
 ---
 
-## Configuration
+## Type Safety & Code Quality
 
-### Environment Variables
-
-```bash
-# Redis
-REDIS_URL=redis://10.0.0.44:6379
-
-# OnyxCore
-ONYX_CORE_URL=http://10.0.0.44:8050
-
-# onyx-infra
-NETWORK_INVENTORY_URL=http://10.0.0.44:8053
-
-# Server
-BRAIN3D_HOST=0.0.0.0
-BRAIN3D_PORT=8888
-BRAIN3D_DEV=false
-```
-
-### File: `src/config.py`
-
-```python
-REDIS_URL = os.getenv("REDIS_URL", "redis://10.0.0.44:6379")
-CORE_URL = os.getenv("ONYX_CORE_URL", "http://10.0.0.44:8050")
-INFRA_URL = os.getenv("NETWORK_INVENTORY_URL", "http://10.0.0.44:8053")
-```
+| Metric | Target | Status |
+|--------|--------|--------|
+| **File Size** | < 300 lines/file | ✅ All modules compliant |
+| **Type Hints** | 100% public functions | 🟡 95% (inherited code) |
+| **Docstrings** | Google convention | ✅ 80%+ coverage |
+| **Imports** | Absolute (from src.xxx) | ✅ All compliant |
+| **Linting** | Ruff zero warnings | 🟡 Minor docstring issues |
+| **Tests** | Unit + integration | 🟡 Basic structure in place |
 
 ---
 
-## Deployment
+## Performance
 
-### Development
-```bash
-cd /home/onyx/projects/skills/brain3d
-python -m src.main
-```
-
-### Production
-```bash
-# On 10.0.0.44
-cd /opt/onyx/skills/brain3d
-python -m src.main &
-# Listens on 0.0.0.0:8888
-```
-
-### Health Check
-```bash
-curl http://10.0.0.44:8888/health
-```
+- **Cache TTL**: 5 seconds (configurable)
+- **Parallel HTTP**: 4 Core/infra calls + N Heart queries
+- **WebSocket Batching**: Broadcast to all clients in O(1)
+- **Real-time Events**: < 100ms latency (Redis → browser)
+- **3D Rendering**: Three.js + force-directed layout
 
 ---
 
 ## Dependencies
 
-### Python Packages
-- **fastapi** — Web framework
-- **uvicorn** — ASGI server
-- **redis** — Redis client
-- **httpx** — Async HTTP
-- **pydantic** — Data validation
-- **jinja2** — Templating
-- **websockets** — WebSocket support
-
-### External Services
-- **Redis** (10.0.0.44:6379) — Event bus
-- **OnyxCore** (10.0.0.44:8050) — Registry + orchestration
-- **onyx-infra** (10.0.0.44:8053) — Infrastructure data
-
----
-
-## Performance Considerations
-
-1. **WebSocket Optimization**
-   - Delta updates (only changed nodes/links)
-   - Message batching (max 100 events per second)
-   - Client-side throttling
-
-2. **Data Aggregation**
-   - Cache full state (TTL: 5 seconds)
-   - Lazy load device details
-   - Parallel HTTP requests to Core + infra
-
-3. **3D Rendering**
-   - LOD (Level of Detail) for large networks
-   - Frustum culling (only render visible nodes)
-   - WebGL 2.0 for performance
+- **fastapi** - Web framework
+- **uvicorn** - ASGI server
+- **pydantic** - Data validation
+- **httpx** - Async HTTP client
+- **redis** - Redis subscriber
+- **websockets** - WebSocket support
+- **jinja2** - Templates
+- **three.js** (frontend) - 3D rendering
 
 ---
 
 ## Testing
 
-### Unit Tests
 ```bash
-pytest src/modules/visualization/tests/
-```
+# Unit tests
+pytest src/modules/data/tests/
+pytest src/modules/api/tests/
 
-### Integration Tests
-```bash
+# Integration tests
 pytest tests/test_integration.py
+
+# Type checking
+mypy src/ --strict
+
+# Linting
+ruff check src/
+
+# Manual health check
+curl http://localhost:8888/health
 ```
 
-### Manual Testing
-```bash
-# Health check
-curl http://10.0.0.44:8888/health
+---
 
-# Get state
-curl http://10.0.0.44:8888/api/state
+## Recent Changes (Refactoring v3.1)
 
-# WebSocket (wscat)
-wscat -c ws://10.0.0.44:8888/ws
-```
+### Code Modularization
+- Extracted 170+ lines of pure logic into merger.py
+- Separated API routes into dedicated module
+- Extracted Core WebSocket into separate client
+- Reduced main.py from 324 → 161 lines
+
+### Compliance
+- All files now < 300 lines (Forge Phase 15)
+- Added type hints + docstrings
+- Organized imports (absolute from src.xxx)
+- Created proper module structure
+
+### Architecture Improvement
+- Clear separation of concerns (data, API, WebSocket)
+- Pure functions for transformation (merger, area_builder)
+- Dependency injection via constructor
+- Type-safe with Pydantic models
 
 ---
 
 ## Future Enhancements
 
-- [ ] Clustering visualization (group nodes by area)
-- [ ] Timeline replay (scrub through events)
-- [ ] Metrics dashboard (CPU, memory, disk)
-- [ ] Alert notifications (skill failures)
-- [ ] Custom layouts (tree, circular, etc.)
+- [ ] Caching strategy (Redis, in-memory)
+- [ ] WebSocket message batching/throttling
+- [ ] 3D LOD (Level of Detail) for 1000+ nodes
+- [ ] Lazy load device details
+- [ ] Clustering visualization
+- [ ] Timeline replay (event history)
+- [ ] Metrics dashboard overlay

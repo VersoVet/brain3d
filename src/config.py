@@ -1,9 +1,7 @@
-"""Configuration centralisee Brain3D"""
+"""Configuration centralisee Brain3D."""
 
 import os
 from enum import Enum
-from typing import Dict
-
 
 # URLs des services
 REDIS_URL = os.getenv("REDIS_URL", "redis://10.0.0.44:6379")
@@ -23,7 +21,8 @@ REDIS_CHANNELS = {
 
 
 class Status(str, Enum):
-    """Statuts possibles pour skills/aires/machines"""
+    """Statuts possibles pour skills/aires/machines."""
+
     UP = "UP"
     WORKING = "WORKING"
     DOWN = "DOWN"
@@ -32,16 +31,16 @@ class Status(str, Enum):
 
 
 # Couleurs par statut (choix utilisateur)
-STATUS_COLORS: Dict[str, str] = {
-    Status.UP: "#00ff88",       # Vert
+STATUS_COLORS: dict[str, str] = {
+    Status.UP: "#00ff88",  # Vert
     Status.WORKING: "#ff00ff",  # Magenta
-    Status.DOWN: "#555555",     # Gris
-    Status.ERROR: "#ff8800",    # Orange
+    Status.DOWN: "#555555",  # Gris
+    Status.ERROR: "#ff8800",  # Orange
     Status.UNKNOWN: "#666666",  # Gris moyen
 }
 
 # Animations par statut
-STATUS_ANIMATIONS: Dict[str, str] = {
+STATUS_ANIMATIONS: dict[str, str] = {
     Status.UP: "pulse-slow",
     Status.WORKING: "pulse-fast",
     Status.DOWN: "none",
@@ -51,16 +50,17 @@ STATUS_ANIMATIONS: Dict[str, str] = {
 
 
 class MachineType(str, Enum):
-    """Types de machines"""
-    HEART = "heart"           # Machine avec OnyxHeart
-    NETWORK = "network"       # Device reseau sans Heart
-    CORE = "core"             # OnyxSoma (Core)
-    FORGE = "forge"           # OnyxLab (Forge)
+    """Types de machines."""
+
+    HEART = "heart"  # Machine avec OnyxHeart
+    NETWORK = "network"  # Device reseau sans Heart
+    CORE = "core"  # OnyxSoma (Core)
+    FORGE = "forge"  # OnyxLab (Forge)
     PROXY_TARGET = "proxy_target"  # Machine sans Heart, surveillee par Heart Proxy
 
 
 # Formes 3D par type de machine
-MACHINE_SHAPES: Dict[str, str] = {
+MACHINE_SHAPES: dict[str, str] = {
     MachineType.HEART: "cube",
     MachineType.NETWORK: "sphere",
     MachineType.CORE: "dodecahedron",
@@ -69,11 +69,11 @@ MACHINE_SHAPES: Dict[str, str] = {
 }
 
 # Couleurs de base par type
-MACHINE_BASE_COLORS: Dict[str, str] = {
-    MachineType.HEART: "#00ff88",     # Vert (selon statut)
-    MachineType.NETWORK: "#4488ff",   # Bleu
-    MachineType.CORE: "#00d4aa",      # Cyan
-    MachineType.FORGE: "#aa44ff",     # Violet
+MACHINE_BASE_COLORS: dict[str, str] = {
+    MachineType.HEART: "#00ff88",  # Vert (selon statut)
+    MachineType.NETWORK: "#4488ff",  # Bleu
+    MachineType.CORE: "#00d4aa",  # Cyan
+    MachineType.FORGE: "#aa44ff",  # Violet
     MachineType.PROXY_TARGET: "#88aaff",  # Bleu clair (proxy)
 }
 
