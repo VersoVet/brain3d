@@ -319,10 +319,10 @@ class NetworkView {
 
         if (obj && obj.userData && obj.userData.nodeId) {
             this.setSelected(obj.userData.nodeId);
-            window.ui?.showMachineSkills(obj.userData);
+            ui?.showMachineSkills(obj.userData);
         } else {
             this.clearSelected();
-            window.ui?.hideInfoPanel();
+            ui?.hidePanel();
         }
     }
 
