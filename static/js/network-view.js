@@ -9,6 +9,7 @@ class NetworkView {
     constructor(scene3d) {
         this.scene3d = scene3d;
         this.meshes = new Map(); // nodeId → Mesh
+        this.labels = new Map(); // nodeId → Sprite
         this.lines = new Map();  // nodeId → Line
         this.selectedId = null;
         this.currentMachines = [];
@@ -35,12 +36,18 @@ class NetworkView {
             if (mesh.geometry) mesh.geometry.dispose();
             if (mesh.material) mesh.material.dispose();
         });
+        this.labels.forEach((sprite) => {
+            this.scene3d.machinesGroup.remove(sprite);
+            if (sprite.material.map) sprite.material.map.dispose();
+            sprite.material.dispose();
+        });
         this.lines.forEach((line) => {
             this.scene3d.connectionsGroup.remove(line);
             if (line.geometry) line.geometry.dispose();
             if (line.material) line.material.dispose();
         });
         this.meshes.clear();
+        this.labels.clear();
         this.lines.clear();
         this.selectedId = null;
     }
@@ -61,6 +68,11 @@ class NetworkView {
             mesh.position.set(0, 0, 0);
             this.scene3d.machinesGroup.add(mesh);
             this.meshes.set(core.node_id, mesh);
+
+            const label = this._createLabel(core.hostname);
+            label.position.set(0, 8, 0);
+            this.scene3d.machinesGroup.add(label);
+            this.labels.set(core.node_id, label);
         }
 
         // Radius based on count
@@ -76,6 +88,12 @@ class NetworkView {
             mesh.position.set(x, 0, z);
             this.scene3d.machinesGroup.add(mesh);
             this.meshes.set(machine.node_id, mesh);
+
+            const labelY = (machine.local_skills || []).length > 0 ? 5 : 4;
+            const label = this._createLabel(machine.hostname);
+            label.position.set(x, labelY, z);
+            this.scene3d.machinesGroup.add(label);
+            this.labels.set(machine.node_id, label);
 
             // Line from core to machine
             if (core) {
@@ -172,6 +190,40 @@ class NetworkView {
             transparent: true,
         });
         return new THREE.Line(geometry, material);
+    }
+
+    /**
+     * Create a text label sprite (canvas texture billboard).
+     *
+     * Args:
+     *     text: Label text
+     *
+     * Returns:
+     *     THREE.Sprite
+     */
+    _createLabel(text) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 48;
+        const ctx = canvas.getContext('2d');
+
+        ctx.clearRect(0, 0, 256, 48);
+        ctx.font = 'bold 22px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Subtle shadow
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = 'rgba(220, 235, 255, 0.92)';
+        ctx.fillText(text, 128, 24);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(12, 2.3, 1);
+        sprite.renderOrder = 999;
+        return sprite;
     }
 
     /**
