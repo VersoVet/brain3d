@@ -141,9 +141,15 @@ class UIManager {
      *     Canonical status (UP, DOWN, ERROR, WORKING, UNKNOWN)
      */
     _normalizeStatus(status) {
-        const map = { running: 'UP', loaded: 'UP', stopped: 'DOWN', error: 'ERROR', unknown: 'UNKNOWN' };
         if (!status) return 'UNKNOWN';
-        return map[status] || String(status).toUpperCase();
+        const s = String(status).toLowerCase();
+        const map = {
+            running: 'UP', loaded: 'UP', up: 'UP', healthy: 'UP', ok: 'UP',
+            stopped: 'DOWN', down: 'DOWN', unknown: 'UNKNOWN',
+            working: 'WORKING', busy: 'WORKING',
+            error: 'ERROR',
+        };
+        return map[s] || s.toUpperCase();
     }
 
     /**

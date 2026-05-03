@@ -256,14 +256,15 @@ class NetworkView {
      *     Normalized status string (UP, DOWN, ERROR, WORKING)
      */
     _normalizeStatus(status) {
+        if (!status) return 'DOWN';
+        const s = String(status).toLowerCase();
         const map = {
-            running: 'UP',
-            loaded: 'UP',
-            stopped: 'DOWN',
+            running: 'UP', loaded: 'UP', up: 'UP', healthy: 'UP', ok: 'UP',
+            stopped: 'DOWN', down: 'DOWN', unknown: 'DOWN',
+            working: 'WORKING', busy: 'WORKING',
             error: 'ERROR',
-            unknown: 'DOWN',
         };
-        return map[status] || status;
+        return map[s] || s.toUpperCase();
     }
 
     /**
