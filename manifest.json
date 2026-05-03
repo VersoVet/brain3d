@@ -1,6 +1,6 @@
 {
   "name": "brain3d",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "core": {
     "name": "brain3d",
     "type": "python",
@@ -48,8 +48,8 @@
     "type": "python",
     "repository": "VersoVet/brain3d",
     "development": {
-      "progress_percent": 65,
-      "dev_status": "in_progress",
+      "progress_percent": 100,
+      "dev_status": "deployed",
       "dev_platform": "dendrite",
       "test_platform": "dendrite"
     },
