@@ -88,9 +88,8 @@ class Brain3DApp {
     }
 }
 
+// scene3d declared in scene.js, ui declared in ui.js
 let app = null;
-let scene3d = null;
-let ui = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     app = new Brain3DApp();
