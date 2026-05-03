@@ -90,7 +90,7 @@ async def get_machines(request: Request) -> dict[str, Any]:
     return {"machines": []}
 
 
-@router.get("/api/machines/{node_id}")
+@router.get("/api/machines/{node_id}", response_model=None)
 async def get_machine(node_id: str, request: Request) -> dict[str, Any] | JSONResponse:
     """Get machine details by ID.
 
@@ -133,7 +133,7 @@ async def get_skills(request: Request, area: str | None = None) -> dict[str, Any
     return {"skills": []}
 
 
-@router.get("/api/skills/{name}")
+@router.get("/api/skills/{name}", response_model=None)
 async def get_skill(name: str, request: Request) -> dict[str, Any] | JSONResponse:
     """Get skill details by name.
 
@@ -170,7 +170,7 @@ async def get_areas(request: Request) -> dict[str, Any]:
     return {"areas": []}
 
 
-@router.get("/api/areas/{area_id}")
+@router.get("/api/areas/{area_id}", response_model=None)
 async def get_area(area_id: str, request: Request) -> dict[str, Any] | JSONResponse:
     """Get brain area details.
 
