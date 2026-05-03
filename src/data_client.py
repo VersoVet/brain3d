@@ -169,7 +169,18 @@ class DataClient:
             data = response.json()
             skills = data.get("skills", [])
             logger.info(f"Core: {len(skills)} skills récupérés")
-            return [Skill(**s) for s in skills if isinstance(s, dict)]
+            parsed = []
+            for s in skills:
+                if not isinstance(s, dict):
+                    continue
+                # Normalize status to uppercase for enum compatibility
+                if "status" in s:
+                    s["status"] = str(s["status"]).upper()
+                try:
+                    parsed.append(Skill(**s))
+                except Exception as e:
+                    logger.debug(f"Skill parse error ({s.get('name')}): {e}")
+            return parsed
         except Exception as e:
             logger.error(f"Error GET /skills: {e}")
             return []
