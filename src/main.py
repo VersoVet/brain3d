@@ -115,7 +115,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Brain3D",
     description="Visualisation 3D de l'ecosysteme Onyx",
-    version="3.0.0",
+    version="3.1.0",
     lifespan=lifespan,
 )
 

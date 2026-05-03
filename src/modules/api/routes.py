@@ -28,7 +28,7 @@ async def health(request: Request) -> dict[str, Any]:
     return {
         "status": "healthy",
         "service": "brain3d",
-        "version": "3.0.0",
+        "version": "3.1.0",
         "redis_connected": redis_subscriber.is_connected if redis_subscriber else False,
         "websocket_clients": ws_manager.connection_count if ws_manager else 0,
     }
@@ -49,7 +49,7 @@ async def status(request: Request) -> dict[str, Any]:
 
     return {
         "service": "brain3d",
-        "version": "3.0.0",
+        "version": "3.1.0",
         "redis": redis_check,
         "core_url": core_url,
         "websocket": ws_manager.get_stats() if ws_manager else {},
