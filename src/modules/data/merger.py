@@ -7,7 +7,7 @@ and detecting inconsistencies.
 import logging
 from typing import Any
 
-from src.models import Incoherence, LocalSkill, Machine, MachineType, Status
+from src.models import Incoherence, LocalSkill, Machine, MachineType, Skill, Status
 
 logger = logging.getLogger(__name__)
 
@@ -125,12 +125,31 @@ def determine_machine_type(hostname: str, has_heart: bool) -> MachineType:
     return MachineType.NETWORK
 
 
+def _core_skill_to_local(skill: "Skill") -> LocalSkill:
+    """Convert a Core Skill to LocalSkill format.
+
+    Args:
+        skill: Skill from Core registry.
+
+    Returns:
+        LocalSkill with name, status, brain_area from Core data.
+    """
+    status_val = skill.status.value if hasattr(skill.status, "value") else str(skill.status)
+    return LocalSkill(
+        name=skill.name,
+        status=status_val.lower(),
+        version=skill.version,
+        brain_area=skill.brain_area,
+    )
+
+
 def merge_machines_with_coherence(
     core_nodes: list[dict[str, Any]],
     network_devices: dict[str, dict[str, Any]],
     heart_skills_by_node: dict[str, Any],
     expected_by_node: dict[str, list[str]],
     parse_datetime: Any,
+    skills_by_host_ip: dict[str, list[Any]] | None = None,
 ) -> list[Machine]:
     """Merge machine data from Core, Heart, and Network Inventory with coherence detection.
 
@@ -140,6 +159,7 @@ def merge_machines_with_coherence(
         heart_skills_by_node: Skills indexed by hostname from Heart queries.
         expected_by_node: Expected skills per node from deployment matrix.
         parse_datetime: Function to parse datetime strings.
+        skills_by_host_ip: Skills from Core registry indexed by host IP (fallback).
 
     Returns:
         List of merged Machine objects.
@@ -156,13 +176,20 @@ def merge_machines_with_coherence(
 
         machine_type = determine_machine_type(hostname, has_heart=True)
 
-        heart_status = node.get("heart_status", "unknown")
+        heart_status = node.get("heart_status") or "unknown"
         if heart_status == "up":
             status = Status.UP
         elif heart_status == "down":
             status = Status.DOWN
         else:
-            status = Status.UNKNOWN
+            # Derive from Core skills when Heart status not available
+            core_host_skills = (skills_by_host_ip or {}).get(ip, [])
+            if any(getattr(s.status, "value", s.status) in ("UP", "WORKING") for s in core_host_skills):
+                status = Status.UP
+            elif core_host_skills:
+                status = Status.DOWN
+            else:
+                status = Status.UNKNOWN
 
         heart_data = heart_skills_by_node.get(hostname, {})
         if isinstance(heart_data, Exception):
@@ -170,6 +197,13 @@ def merge_machines_with_coherence(
             logger.warning(f"Erreur Heart {hostname}: {heart_data}")
 
         local_skills = parse_heart_skills(heart_data)
+
+        # Fallback: use Core registry skills when Heart is not reachable
+        if not local_skills and skills_by_host_ip:
+            core_skills_for_node = skills_by_host_ip.get(ip, [])
+            local_skills = [_core_skill_to_local(s) for s in core_skills_for_node]
+            if local_skills:
+                logger.info(f"{hostname}: {len(local_skills)} skills from Core registry (Heart not reachable)")
 
         expected_skills = expected_by_node.get(ip, []) or expected_by_node.get(
             hostname, []

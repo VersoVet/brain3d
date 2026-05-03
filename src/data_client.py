@@ -88,12 +88,12 @@ class DataClient:
             logger.error(f"Error fetching deploy matrix: {deploy_matrix}")
             deploy_matrix = {}
 
-        # Query each Heart for local skills
+        # Query each Heart for local skills (try all nodes with an IP)
         heart_queries = {}
         for node in core_nodes:
             ip = node.get("ip", "")
             hostname = node.get("hostname", "")
-            if node.get("heart_status") == "up" and ip:
+            if ip:
                 heart_queries[hostname] = self._query_heart(ip)
 
         if heart_queries:
@@ -108,6 +108,12 @@ class DataClient:
         # Build expected skills matrix
         expected_by_node = build_expected_skills_by_node(deploy_matrix)
 
+        # Build skills by host IP from Core registry (fallback when Heart not reachable)
+        skills_by_host_ip: dict[str, list] = {}
+        for skill in core_skills:
+            if skill.host:
+                skills_by_host_ip.setdefault(skill.host, []).append(skill)
+
         # Merge machines with coherence detection
         machines = merge_machines_with_coherence(
             core_nodes,
@@ -115,6 +121,7 @@ class DataClient:
             heart_skills_by_node,
             expected_by_node,
             self._parse_datetime,
+            skills_by_host_ip,
         )
 
         # Extract brain areas

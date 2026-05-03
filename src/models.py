@@ -62,6 +62,7 @@ class Skill(BaseModel):
     pid: int | None = None
 
     # Metadata
+    host: str = ""  # Host IP from Core registry
     deployed_on: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     last_update: datetime = Field(default_factory=datetime.now)
