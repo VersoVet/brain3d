@@ -25,9 +25,13 @@ class Brain3DApp {
     _setupControls() {
         const canvas = scene3d.renderer.domElement;
         let downPos = { x: 0, y: 0 };
+        let lastUpTime = 0;
+        let lastUpPos = { x: 0, y: 0 };
+        const DBL_DELAY = 300; // ms
+        const DBL_DIST = 20;   // px
 
-        // Use pointer events — OrbitControls calls preventDefault() on pointerdown
-        // which suppresses mousedown/mouseup, so we must use pointerdown/pointerup.
+        // OrbitControls calls preventDefault() on pointerdown which suppresses
+        // mousedown/mouseup/click/dblclick — use pointerdown/pointerup instead.
         canvas.addEventListener('pointerdown', (e) => {
             downPos = { x: e.clientX, y: e.clientY };
         });
@@ -35,8 +39,20 @@ class Brain3DApp {
         canvas.addEventListener('pointerup', (e) => {
             const dx = e.clientX - downPos.x;
             const dy = e.clientY - downPos.y;
-            if (Math.sqrt(dx * dx + dy * dy) < 5) {
+            if (Math.sqrt(dx * dx + dy * dy) >= 5) return; // was a drag
+
+            const now = Date.now();
+            const dtLast = now - lastUpTime;
+            const dxLast = e.clientX - lastUpPos.x;
+            const dyLast = e.clientY - lastUpPos.y;
+
+            if (dtLast < DBL_DELAY && Math.sqrt(dxLast * dxLast + dyLast * dyLast) < DBL_DIST) {
+                // Double-click detected
                 window.networkView?.onClick(e);
+                lastUpTime = 0;
+            } else {
+                lastUpTime = now;
+                lastUpPos = { x: e.clientX, y: e.clientY };
             }
         });
     }
