@@ -53,9 +53,9 @@ class NavigationManager {
 
     _onClick(event) {
         // Delegate to new view renderers if active
-        if (window.viewManager && viewManager.currentView !== 'network') {
-            if (viewManager.activeRenderer && viewManager.activeRenderer.onClick) {
-                viewManager.activeRenderer.onClick(this.scene.raycaster);
+        if (window.viewManager && window.viewManager.currentView !== 'network') {
+            if (window.viewManager.activeRenderer && window.viewManager.activeRenderer.onClick) {
+                window.viewManager.activeRenderer.onClick(this.scene.raycaster);
                 return;
             }
         }

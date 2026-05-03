@@ -23,7 +23,7 @@ class Brain3DApp {
         // Initialize managers
         navigation = new NavigationManager(scene3d, this);
         ui = new UIManager();
-        viewManager = new ViewManager(scene3d, this.getState.bind(this));
+        window.viewManager = new ViewManager(scene3d, this.getState.bind(this));
 
         // Start animations
         animationManager.start();
@@ -46,13 +46,13 @@ class Brain3DApp {
 
     _setupViewButtons() {
         document.getElementById('btn-view-network')?.addEventListener('click', () => {
-            viewManager?.switchTo('network');
+            window.viewManager?.switchTo('network');
         });
         document.getElementById('btn-view-machine')?.addEventListener('click', () => {
-            viewManager?.switchTo('machine');
+            window.viewManager?.switchTo('machine');
         });
         document.getElementById('btn-view-area')?.addEventListener('click', () => {
-            viewManager?.switchTo('area');
+            window.viewManager?.switchTo('area');
         });
     }
 
@@ -62,8 +62,8 @@ class Brain3DApp {
             console.log('Received state:', state);
             this.state = state;
             this._renderState(state);
-            if (viewManager) {
-                viewManager.updateState(state);
+            if (window.viewManager) {
+                window.viewManager.updateState(state);
             }
         });
 
@@ -71,8 +71,8 @@ class Brain3DApp {
         wsClient.on('onStatusUpdate', (data) => {
             console.log('Status update:', data);
             this._handleStatusUpdate(data);
-            if (viewManager) {
-                viewManager.handleStatusUpdate(data);
+            if (window.viewManager) {
+                window.viewManager.handleStatusUpdate(data);
             }
         });
 
@@ -94,8 +94,8 @@ class Brain3DApp {
             if (connectionRenderer) {
                 connectionRenderer.handleRedisEvent(data);
             }
-            if (viewManager) {
-                viewManager.handleRedisEvent(data);
+            if (window.viewManager) {
+                window.viewManager.handleRedisEvent(data);
             }
         });
     }
@@ -204,7 +204,7 @@ class Brain3DApp {
             lastTime = now;
 
             // Only run physics for network view
-            if (!viewManager || viewManager.currentView === 'network') {
+            if (!window.viewManager || window.viewManager.currentView === 'network') {
                 physics.update();
                 machineRenderer.updateAllPositions();
                 connectionRenderer.updateAllConnections();
