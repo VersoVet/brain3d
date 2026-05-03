@@ -24,46 +24,21 @@ class Brain3DApp {
 
     _setupControls() {
         const canvas = scene3d.renderer.domElement;
-        let mouseDownPos = { x: 0, y: 0 };
+        let downPos = { x: 0, y: 0 };
 
-        // Track mousedown position to distinguish click from drag
-        canvas.addEventListener('mousedown', (e) => {
-            mouseDownPos = { x: e.clientX, y: e.clientY };
+        // Use pointer events — OrbitControls calls preventDefault() on pointerdown
+        // which suppresses mousedown/mouseup, so we must use pointerdown/pointerup.
+        canvas.addEventListener('pointerdown', (e) => {
+            downPos = { x: e.clientX, y: e.clientY };
         });
 
-        // Detect click as mouseup with minimal movement
-        canvas.addEventListener('mouseup', (e) => {
-            const dx = e.clientX - mouseDownPos.x;
-            const dy = e.clientY - mouseDownPos.y;
+        canvas.addEventListener('pointerup', (e) => {
+            const dx = e.clientX - downPos.x;
+            const dy = e.clientY - downPos.y;
             if (Math.sqrt(dx * dx + dy * dy) < 5) {
                 window.networkView?.onClick(e);
             }
         });
-
-        // Touch: single tap
-        let lastTap = 0;
-        let lastTapPos = { x: 0, y: 0 };
-
-        canvas.addEventListener('touchend', (e) => {
-            if (e.changedTouches.length !== 1) return;
-            const touch = e.changedTouches[0];
-            const now = Date.now();
-            const dt = now - lastTap;
-            const dx = touch.clientX - lastTapPos.x;
-            const dy = touch.clientY - lastTapPos.y;
-
-            if (dt < 350 && Math.sqrt(dx * dx + dy * dy) < 40) {
-                lastTap = 0;
-                return; // Double-tap, ignore
-            }
-
-            lastTap = now;
-            lastTapPos = { x: touch.clientX, y: touch.clientY };
-
-            setTimeout(() => {
-                window.networkView?.onClick({ clientX: touch.clientX, clientY: touch.clientY });
-            }, 200);
-        }, { passive: true });
     }
 
     _setupWebSocketCallbacks() {
