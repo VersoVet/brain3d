@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 
 from src.config import CORE_URL, NETWORK_INVENTORY_URL, Status
-from src.models import NetworkState, Skill
+from src.models import NetworkState, Skill  # noqa: F401 (used in type hint)
 from src.modules.data.area_builder import extract_areas
 from src.modules.data.merger import (
     build_expected_skills_by_node,
@@ -107,6 +107,11 @@ class DataClient:
 
         # Build expected skills matrix
         expected_by_node = build_expected_skills_by_node(deploy_matrix)
+
+        # Check real skill statuses via /health endpoints (parallel, 2s timeout)
+        if core_skills:
+            health_checks = [self._check_skill_health(s) for s in core_skills if s.host and s.port]
+            await asyncio.gather(*health_checks, return_exceptions=True)
 
         # Build skills by host IP from Core registry (fallback when Heart not reachable)
         skills_by_host_ip: dict[str, list] = {}
@@ -237,6 +242,30 @@ class DataClient:
         except Exception as e:
             logger.error(f"Error GET /devices: {e}")
             return {}
+
+    async def _check_skill_health(self, skill: Skill) -> None:
+        """Query skill /health endpoint and update its status in-place.
+
+        Args:
+            skill: Skill object with host and port set.
+        """
+        client = await self._get_client()
+        url = f"http://{skill.host}:{skill.port}/health"
+        try:
+            resp = await client.get(url, timeout=2.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                raw = data.get("status", "unknown").lower()
+                if raw in ("healthy", "up", "ok"):
+                    skill.status = Status.UP
+                elif raw in ("working", "busy"):
+                    skill.status = Status.WORKING
+                else:
+                    skill.status = Status.DOWN
+            else:
+                skill.status = Status.DOWN
+        except Exception:
+            skill.status = Status.DOWN
 
     def _parse_datetime(self, dt_str: str | None) -> datetime | None:
         """Parse ISO datetime string.
