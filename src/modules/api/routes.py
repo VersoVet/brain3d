@@ -6,12 +6,29 @@ WebSocket /ws for real-time updates.
 """
 
 import contextlib
+import json
 import uuid
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
+
+def _get_version() -> str:
+    """Read version from manifest.json."""
+    try:
+        manifest_path = Path(__file__).parent.parent.parent / "manifest.json"
+        if manifest_path.exists():
+            with open(manifest_path) as f:
+                data = json.load(f)
+                return data.get("version", "3.1.0")
+    except Exception:
+        pass
+    return "3.1.0"
+
+
+CURRENT_VERSION = _get_version()
 router = APIRouter()
 
 
@@ -28,7 +45,7 @@ async def health(request: Request) -> dict[str, Any]:
     return {
         "status": "healthy",
         "service": "brain3d",
-        "version": "3.1.0",
+        "version": CURRENT_VERSION,
         "redis_connected": redis_subscriber.is_connected if redis_subscriber else False,
         "websocket_clients": ws_manager.connection_count if ws_manager else 0,
     }
@@ -49,7 +66,7 @@ async def status(request: Request) -> dict[str, Any]:
 
     return {
         "service": "brain3d",
-        "version": "3.1.0",
+        "version": CURRENT_VERSION,
         "redis": redis_check,
         "core_url": core_url,
         "websocket": ws_manager.get_stats() if ws_manager else {},

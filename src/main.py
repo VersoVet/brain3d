@@ -3,6 +3,7 @@
 FastAPI application with real-time WebSocket updates via Redis and OnyxCore.
 """
 
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -34,6 +35,22 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
+
+
+def get_version() -> str:
+    """Read version from manifest.json."""
+    try:
+        manifest_path = BASE_DIR / "manifest.json"
+        if manifest_path.exists():
+            with open(manifest_path) as f:
+                data = json.load(f)
+                return data.get("version", "3.1.0")
+    except Exception:
+        pass
+    return "3.1.0"
+
+
+VERSION = get_version()
 
 
 @asynccontextmanager
@@ -115,7 +132,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Brain3D",
     description="Visualisation 3D de l'ecosysteme Onyx",
-    version="3.1.0",
+    version=VERSION,
     lifespan=lifespan,
 )
 
