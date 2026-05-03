@@ -296,7 +296,7 @@ class MachineViewRenderer {
     }
 
     /**
-     * Handle click event.
+     * Handle click event - show info only, no camera movement.
      *
      * Args:
      *     raycaster: THREE.Raycaster
@@ -307,12 +307,17 @@ class MachineViewRenderer {
         if (intersects.length > 0) {
             const obj = intersects[0].object;
             if (obj.userData.nodeType === 'machine') {
-                window.ui?.showMachineInfo({ node_id: obj.userData.nodeId });
+                window.ui?.showMachineInfo({ node_id: obj.userData.nodeId, hostname: obj.userData.hostname });
             } else if (obj.userData.nodeType === 'skill') {
-                window.ui?.showSkillInfo(
-                    { name: obj.userData.skillName },
-                    obj.userData.hostNodeId
-                );
+                const skillData = Array.from(this.skillMeshes.values())
+                    .flat()
+                    .find(m => m === intersects[0].object);
+                if (skillData) {
+                    window.ui?.showSkillInfo(
+                        { name: obj.userData.skillName, status: obj.userData.status },
+                        obj.userData.hostNodeId
+                    );
+                }
             }
         }
     }

@@ -301,7 +301,7 @@ class AreaViewRenderer {
     }
 
     /**
-     * Handle click event.
+     * Handle click event - show info only, no camera movement.
      *
      * Args:
      *     raycaster: THREE.Raycaster
@@ -314,11 +314,13 @@ class AreaViewRenderer {
             if (obj.userData.nodeType === 'area') {
                 const areaId = obj.userData.areaId;
                 const skills = this.areaSkills.get(areaId) || [];
-                window.ui?.showAreaInfo({ id: areaId }, skills);
+                window.ui?.showAreaInfo({ id: areaId, name: areaId }, skills);
             } else if (obj.userData.nodeType === 'skill') {
                 const skills = this.areaSkills.get(obj.userData.areaId) || [];
                 const skill = skills.find((s) => s.name === obj.userData.skillName);
-                window.ui?.showSkillInfo(skill);
+                if (skill) {
+                    window.ui?.showSkillInfo(skill);
+                }
             }
         }
     }
