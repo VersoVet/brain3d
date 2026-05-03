@@ -3,7 +3,6 @@
 FastAPI application with real-time WebSocket updates via Redis and OnyxCore.
 """
 
-import contextlib
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -157,61 +156,32 @@ async def receive_metrics(node_id: str, request: Request) -> dict[str, Any]:
     Returns:
         Metrics processing result.
     """
-    # Get onyx SDK from app state
     onyx = getattr(app.state, "onyx", None)
-
-    # onyx.working() - Start processing task
-    if onyx:
-        try:
-            onyx.working(f"Processing metrics for {node_id}")
-        except Exception:
-            pass
+    onyx.working(f"metrics: {node_id}") if onyx else None
 
     try:
         state_manager = app.state.state_manager
         ws_manager = app.state.ws_manager
-
-        # Parse incoming metrics
         data = await request.json()
         metrics = data.get("metrics", {})
 
-        # Update machine metrics in state
         if state_manager:
             machine = state_manager.get_machine(node_id)
             if machine:
-                # Update metrics
                 if "cpu_percent" in metrics:
                     machine.metrics.cpu_percent = float(metrics.get("cpu_percent", 0))
                 if "ram_percent" in metrics:
                     machine.metrics.ram_percent = float(metrics.get("ram_percent", 0))
                 if "disk_percent" in metrics:
                     machine.metrics.disk_percent = float(metrics.get("disk_percent", 0))
-
-                # Broadcast metrics update to clients
                 await ws_manager.broadcast_metrics_update(node_id, metrics)
 
-        result = {
-            "success": True,
-            "node_id": node_id,
-            "metrics_processed": len(metrics),
-        }
+        onyx.done() if onyx else None
+        return {"success": True, "node_id": node_id, "metrics_processed": len(metrics)}
 
-        # onyx.done() - Mark task as complete
-        with contextlib.suppress(Exception):
-            if onyx:
-                onyx.done()
-
-        return result
     except Exception as e:
-        # onyx.error() - Report error for visibility
-        with contextlib.suppress(Exception):
-            if onyx:
-                onyx.error(f"Metrics processing failed: {str(e)}")
-
-        # Mark task as done even on error
-        with contextlib.suppress(Exception):
-            if onyx:
-                onyx.done()
+        onyx.error(str(e)) if onyx else None
+        onyx.done() if onyx else None
         return {"success": False, "error": str(e)}
 
 
