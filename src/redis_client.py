@@ -20,7 +20,7 @@ class RedisSubscriber:
 
     def __init__(self, redis_url: str = REDIS_URL, channels: list[str] | None = None):
         self.redis_url = redis_url
-        self.channels = channels or [REDIS_CHANNELS["events"]]
+        self.channels = channels or list(REDIS_CHANNELS.values())
         self.redis: aioredis.Redis | None = None
         self.pubsub: aioredis.client.PubSub | None = None
         self._running = False
@@ -80,19 +80,21 @@ class RedisSubscriber:
 
         try:
             data = json.loads(message["data"])
+            channel = message.get("channel", "")
             event = RedisEvent(
                 type=data.get("type", "unknown"),
                 node=data.get("node", "unknown"),
+                channel=channel,
                 data=data.get("data", {}),
             )
 
-            # Appeler tous les callbacks
+            # Appeler tous les callbacks avec (event, channel)
             for callback in self._callbacks:
                 try:
                     if asyncio.iscoroutinefunction(callback):
-                        await callback(event)
+                        await callback(event, channel)
                     else:
-                        callback(event)
+                        callback(event, channel)
                 except Exception as e:
                     logger.error(f"Erreur callback Redis: {e}")
 

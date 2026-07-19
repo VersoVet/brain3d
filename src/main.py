@@ -20,11 +20,22 @@ try:
 except ImportError:
     OnyxClient = None
 
-from src.config import CORE_URL, DEV_PORT, NETWORK_INVENTORY_URL, PORT, REDIS_URL
+from src.channel_handlers import ChannelEventRouter
+from src.config import (
+    CORE_URL,
+    DEV_PORT,
+    NETWORK_INVENTORY_URL,
+    PORT,
+    REDIS_CHANNELS,
+    REDIS_URL,
+)
 from src.data_client import DataClient
 from src.modules.api.routes import router
+from src.modules.api.routes_events import events_router
+from src.overlay_enricher import OverlayEnricher
 from src.redis_client import RedisSubscriber
 from src.state_manager import StateManager
+from src.stream_reader import RedisStreamReader
 from src.websocket_manager import WebSocketManager
 
 logging.basicConfig(
@@ -42,7 +53,7 @@ def get_version() -> str:
     try:
         manifest_path = BASE_DIR / "manifest.json"
         if manifest_path.exists():
-            with open(manifest_path) as f:
+            with Path(manifest_path).open() as f:
                 data = json.load(f)
                 return data.get("version", "3.1.0")
     except Exception:
@@ -71,25 +82,40 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"OnyxClient SDK init failed: {e}")
 
+    # Load overlay metadata
+    overlay = OverlayEnricher()
+    await overlay.load()
+
     # Initialize components
-    data_client = DataClient(core_url=CORE_URL, network_url=NETWORK_INVENTORY_URL)
+    data_client = DataClient(
+        core_url=CORE_URL, network_url=NETWORK_INVENTORY_URL, overlay=overlay
+    )
     ws_manager = WebSocketManager()
     state_manager = StateManager(data_client, ws_manager)
+    channel_router = ChannelEventRouter(state_manager, ws_manager)
+
+    # Initialize stream reader
+    stream_reader = RedisStreamReader(redis_url=REDIS_URL)
+    await stream_reader.connect()
 
     # Start WebSocket manager
     await ws_manager.start()
 
-    # Initialize Redis subscriber
+    # Initialize Redis subscriber (all channels)
     redis_subscriber = RedisSubscriber(redis_url=REDIS_URL)
-    redis_subscriber.add_callback(state_manager.handle_redis_event)
 
-    async def broadcast_redis_to_frontend(event):
-        """Forward Redis events to frontend for visualization."""
+    async def route_redis_event(event: Any, channel: str) -> None:
+        """Route Redis events by channel."""
+        if channel == REDIS_CHANNELS["events"]:
+            await state_manager.handle_redis_event(event)
+        else:
+            await channel_router.handle_event(event, channel)
+        # Always forward to frontend
         await ws_manager.broadcast_redis_event(
             event_type=event.type, node=event.node, data=event.data
         )
 
-    redis_subscriber.add_callback(broadcast_redis_to_frontend)
+    redis_subscriber.add_callback(route_redis_event)
 
     # Try connecting to Redis
     if await redis_subscriber.start():
@@ -116,6 +142,8 @@ async def lifespan(app: FastAPI):
     app.state.data_client = data_client
     app.state.ws_manager = ws_manager
     app.state.state_manager = state_manager
+    app.state.stream_reader = stream_reader
+    app.state.overlay = overlay
     app.state.core_url = CORE_URL
 
     yield
@@ -124,6 +152,7 @@ async def lifespan(app: FastAPI):
     logger.info("Stopping Brain3D...")
     await state_manager.stop_core_ws()
     await redis_subscriber.stop()
+    await stream_reader.close()
     await ws_manager.stop()
     await data_client.close()
     logger.info("Brain3D stopped")
@@ -144,6 +173,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Include API routes
 app.include_router(router)
+app.include_router(events_router)
 
 
 @app.get("/", response_class=HTMLResponse)

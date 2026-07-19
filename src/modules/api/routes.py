@@ -21,7 +21,7 @@ def _get_version() -> str:
         # From src/modules/api/routes.py -> up to project root
         manifest_path = Path(__file__).parent.parent.parent.parent / "manifest.json"
         if manifest_path.exists():
-            with open(manifest_path) as f:
+            with Path(manifest_path).open() as f:
                 data = json.load(f)
                 return data.get("version", "3.1.0")
     except Exception:

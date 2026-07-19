@@ -1,6 +1,6 @@
-# Brain3D Architecture (v3.1 - Refactored)
+# Brain3D Architecture (v3.2 - Full Redis)
 
-**Last Updated:** 2026-04-29
+**Last Updated:** 2026-07-19
 
 ## Overview
 
@@ -9,7 +9,7 @@ Brain3D est le **visualiseur 3D temps réel** du système Onyx pour le Cerebellu
 - **OnyxCore** pour la structure et les relations machines/skills (registry)
 - **onyx-infra** pour les données d'infrastructure physique (network inventory)
 
-**Version:** 3.1.0 (Refactored)  
+**Version:** 3.2.0 (Full Redis + Overlay)  
 **Brain Area:** cerebellum  
 **Port:** 8888 (prod), 9888 (dev)  
 **Framework:** FastAPI + Three.js

@@ -135,8 +135,12 @@ class Machine(BaseModel):
     is_coherent: bool = True
 
     # Position 3D (pour force-directed layout)
-    position: dict[str, float] = Field(default_factory=lambda: {"x": 0.0, "y": 0.0, "z": 0.0})
-    velocity: dict[str, float] = Field(default_factory=lambda: {"x": 0.0, "y": 0.0, "z": 0.0})
+    position: dict[str, float] = Field(
+        default_factory=lambda: {"x": 0.0, "y": 0.0, "z": 0.0}
+    )
+    velocity: dict[str, float] = Field(
+        default_factory=lambda: {"x": 0.0, "y": 0.0, "z": 0.0}
+    )
 
     # Metadata
     device_type: str = "unknown"  # nas, server, workstation, etc.
@@ -147,6 +151,12 @@ class Machine(BaseModel):
     last_seen: datetime | None = None  # Dernier contact (depuis /deploy/nodes)
     uptime_seconds: int = 0
     tags: list[str] = Field(default_factory=list)  # Tags depuis Core
+
+    # Overlay enrichment (from onyx-infra overlay.yaml)
+    capabilities: list[str] = Field(default_factory=list)
+    services: list[dict[str, Any]] = Field(default_factory=list)
+    actions: dict[str, str] = Field(default_factory=dict)
+    specs: dict[str, Any] = Field(default_factory=dict)
 
 
 class Heart(BaseModel):
@@ -179,6 +189,7 @@ class RedisEvent(BaseModel):
 
     type: str  # heartbeat, status_change, skill_started, etc.
     node: str
+    channel: str = ""  # Redis channel source
     timestamp: datetime = Field(default_factory=datetime.now)
     data: dict[str, Any] = Field(default_factory=dict)
 

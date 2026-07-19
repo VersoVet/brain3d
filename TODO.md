@@ -1,9 +1,9 @@
 # Brain3D - TODO & Roadmap
 
-## Current Status: In Progress (90%)
+## Current Status: In Progress (95%)
 
 Target: Fully functional 3D visualization dashboard for Cerebellum area  
-Last Updated: 2026-04-29
+Last Updated: 2026-07-19
 
 ---
 
@@ -38,18 +38,23 @@ Last Updated: 2026-04-29
 
 ---
 
+### Phase 7: Full Redis Exploitation (v3.2)
+- [x] Subscribe to all 4 Redis channels (events, skill_status, broadcast, forge)
+- [x] Channel-aware event routing (ChannelEventRouter)
+- [x] Redis Stream reader for event history (onyx:events:stream)
+- [x] Overlay enrichment from onyx-infra overlay.yaml
+- [x] New API endpoints: /api/events/history, /api/events/since, /api/overlay
+- [x] Updated API.md and ARCHITECTURE.md
+
+---
+
 ## In Progress 🔄
 
-### Phase 7: Validation & Testing
+### Phase 8: Validation & Testing
 - [ ] Pass Forge validation (18 phases)
 - [ ] Unit tests for merger, area_builder modules
 - [ ] Integration tests with mock data
 - [ ] Manual testing with real Onyx infrastructure
-
-### Phase 8: Documentation
-- [ ] Update ARCHITECTURE.md with new module structure
-- [ ] Update API.md with refactored endpoints
-- [ ] Add module docstrings
 
 ---
 

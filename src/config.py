@@ -15,9 +15,18 @@ DEV_PORT = int(os.getenv("BRAIN3D_DEV_PORT", "9888"))
 # Redis channels
 REDIS_CHANNELS = {
     "events": "onyx:events",
+    "skill_status": "onyx:skill:status",
     "broadcast": "onyx:broadcast",
     "forge": "onyx:forge",
 }
+
+# Redis stream (persistent event history)
+REDIS_STREAM = "onyx:events:stream"
+
+# Overlay metadata path
+OVERLAY_PATH = os.getenv(
+    "OVERLAY_PATH", "/home/onyx/projects/skills/onyx-infra/config/overlay.yaml"
+)
 
 
 class Status(str, Enum):

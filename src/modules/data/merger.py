@@ -84,19 +84,25 @@ def detect_incoherences(
     local_names = {s.name for s in local_skills}
     expected_names = set(expected_skills)
 
-    incoherences = [Incoherence(
-                type="unexpected_skill",
-                skill=name,
-                message=f"Skill '{name}' présent sur Heart mais pas dans registre Core",
-                severity="warning",
-            ) for name in local_names - expected_names]
+    incoherences = [
+        Incoherence(
+            type="unexpected_skill",
+            skill=name,
+            message=f"Skill '{name}' présent sur Heart mais pas dans registre Core",
+            severity="warning",
+        )
+        for name in local_names - expected_names
+    ]
 
-    incoherences.extend(Incoherence(
-                type="missing_skill",
-                skill=name,
-                message=f"Skill '{name}' attendu par Core mais absent du Heart",
-                severity="error",
-            ) for name in expected_names - local_names)
+    incoherences.extend(
+        Incoherence(
+            type="missing_skill",
+            skill=name,
+            message=f"Skill '{name}' attendu par Core mais absent du Heart",
+            severity="error",
+        )
+        for name in expected_names - local_names
+    )
 
     return incoherences
 
@@ -134,7 +140,9 @@ def _core_skill_to_local(skill: "Skill") -> LocalSkill:
     Returns:
         LocalSkill with name, status, brain_area from Core data.
     """
-    status_val = skill.status.value if hasattr(skill.status, "value") else str(skill.status)
+    status_val = (
+        skill.status.value if hasattr(skill.status, "value") else str(skill.status)
+    )
     return LocalSkill(
         name=skill.name,
         status=status_val.lower(),
@@ -184,7 +192,10 @@ def merge_machines_with_coherence(
         else:
             # Derive from Core skills when Heart status not available
             core_host_skills = (skills_by_host_ip or {}).get(ip, [])
-            if any(getattr(s.status, "value", s.status) in ("UP", "WORKING") for s in core_host_skills):
+            if any(
+                getattr(s.status, "value", s.status) in ("UP", "WORKING")
+                for s in core_host_skills
+            ):
                 status = Status.UP
             elif core_host_skills:
                 status = Status.DOWN
@@ -203,7 +214,9 @@ def merge_machines_with_coherence(
             core_skills_for_node = skills_by_host_ip.get(ip, [])
             local_skills = [_core_skill_to_local(s) for s in core_skills_for_node]
             if local_skills:
-                logger.info(f"{hostname}: {len(local_skills)} skills from Core registry (Heart not reachable)")
+                logger.info(
+                    f"{hostname}: {len(local_skills)} skills from Core registry (Heart not reachable)"
+                )
 
         expected_skills = expected_by_node.get(ip, []) or expected_by_node.get(
             hostname, []

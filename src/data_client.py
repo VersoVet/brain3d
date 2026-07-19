@@ -7,17 +7,20 @@ onyx-infra network inventory, aggregates and merges the data.
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from src.config import CORE_URL, NETWORK_INVENTORY_URL, Status
-from src.models import NetworkState, Skill  # noqa: F401 (used in type hint)
+from src.models import NetworkState, Skill
 from src.modules.data.area_builder import extract_areas
 from src.modules.data.merger import (
     build_expected_skills_by_node,
     merge_machines_with_coherence,
 )
+
+if TYPE_CHECKING:
+    from src.overlay_enricher import OverlayEnricher
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +33,7 @@ class DataClient:
         core_url: str = CORE_URL,
         network_url: str = NETWORK_INVENTORY_URL,
         timeout: float = 10.0,
+        overlay: "OverlayEnricher | None" = None,
     ):
         """Initialize DataClient.
 
@@ -37,10 +41,12 @@ class DataClient:
             core_url: OnyxCore base URL.
             network_url: network-inventory base URL.
             timeout: HTTP timeout in seconds.
+            overlay: Optional OverlayEnricher for machine metadata.
         """
         self.core_url = core_url
         self.network_url = network_url
         self.timeout = timeout
+        self._overlay = overlay
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -110,7 +116,9 @@ class DataClient:
 
         # Check real skill statuses via /health endpoints (parallel, 2s timeout)
         if core_skills:
-            health_checks = [self._check_skill_health(s) for s in core_skills if s.host and s.port]
+            health_checks = [
+                self._check_skill_health(s) for s in core_skills if s.host and s.port
+            ]
             await asyncio.gather(*health_checks, return_exceptions=True)
 
         # Build skills by host IP from Core registry (fallback when Heart not reachable)
@@ -128,6 +136,10 @@ class DataClient:
             self._parse_datetime,
             skills_by_host_ip,
         )
+
+        # Enrich machines with overlay metadata
+        if self._overlay:
+            machines = [self._overlay.enrich_machine(m) for m in machines]
 
         # Extract brain areas
         areas = extract_areas(core_skills)

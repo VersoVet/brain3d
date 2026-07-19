@@ -1,6 +1,6 @@
 # Brain3D API Documentation
 
-**Last Updated:** 2026-04-29
+**Last Updated:** 2026-07-19
 
 ## Overview
 
@@ -342,12 +342,85 @@ ws://10.0.0.44:8888/ws
 
 ---
 
+## Events & History
+
+### GET /api/events/history
+Derniers événements du stream Redis persistant.
+
+**Query Parameters:**
+- `count` (optional, default=50, max=500): Nombre d'événements
+
+**Response:** 200 OK
+```json
+{
+  "events": [
+    {
+      "type": "infrastructure_change",
+      "node": "network-inventory",
+      "channel": "onyx:events:stream",
+      "timestamp": "2026-07-19T21:44:29",
+      "data": {"changes": ["Fleet hardware audit..."]}
+    }
+  ],
+  "count": 5,
+  "stream_info": {
+    "status": "connected",
+    "length": 5,
+    "stream_key": "onyx:events:stream"
+  }
+}
+```
+
+### GET /api/events/since/{last_id}
+Événements postérieurs à un ID de stream.
+
+**Parameters:**
+- `last_id` (path): ID du dernier événement reçu (ex: "1784394191173-0")
+- `count` (query, optional, default=50): Nombre max
+
+**Response:** 200 OK
+```json
+{
+  "events": [...],
+  "count": 3
+}
+```
+
+---
+
+## Overlay Metadata
+
+### GET /api/overlay/{hostname}
+Métadonnées statiques d'une machine depuis overlay.yaml.
+
+**Parameters:**
+- `hostname` (path): Nom de la machine (ex: "OnyxSoma")
+
+**Response:** 200 OK
+```json
+{
+  "hostname": "OnyxSoma",
+  "capabilities": ["ssh", "web_ui", "keepalived", "docker", "nfs", "smb", "ipmi"],
+  "services": [
+    {"name": "redis", "port": 6379},
+    {"name": "onyx-core", "port": 8050, "url": "http://10.0.0.44:8050"}
+  ],
+  "loaded": true
+}
+```
+
+---
+
 ## Data Sources
 
-### Real-time Channels (Redis)
-- `onyx:events` - Système d'événements
-- `onyx:skill:status` - Changements de statut
-- `onyx:machines` - Événements machines
+### Real-time Channels (Redis Pub/Sub)
+- `onyx:events` - Événements infrastructure (device_online/offline, heartbeat, sync)
+- `onyx:skill:status` - Statuts skills temps réel via onyx_sdk (UP/DOWN/WORKING)
+- `onyx:broadcast` - Notifications système (maintenance, alertes)
+- `onyx:forge` - Événements Forge (build, deploy, validate)
+
+### Persistent Stream (Redis Stream)
+- `onyx:events:stream` - Historique persistant (10k events max, auto-trim)
 
 ### REST Endpoints (HTTP)
 - **OnyxCore** (10.0.0.44:8050)
@@ -357,7 +430,10 @@ ws://10.0.0.44:8888/ws
   - WS /ws
 
 - **onyx-infra** (10.0.0.44:8053)
-  - GET /devices
+  - GET /api/inventory/devices
+
+### Static Metadata
+- **overlay.yaml** - Capabilities, services, WoL, specs par machine
 
 ### Direct Queries
 - **Hearts** (port 8060 per machine)
@@ -425,11 +501,18 @@ Currently no rate limiting. In production:
 
 ## Changelog
 
+### v3.2.0 (2026-07-19)
+- Full Redis exploitation: subscribe to all 4 channels (events, skill_status, broadcast, forge)
+- Redis Stream reader for event history (onyx:events:stream)
+- Overlay enrichment from onyx-infra overlay.yaml (capabilities, services, WoL, specs)
+- New endpoints: /api/events/history, /api/events/since/{id}, /api/overlay/{hostname}
+- Channel-aware event routing (ChannelEventRouter)
+
 ### v3.1.0 (2026-04-29)
-- ✅ Refactored code into modules
-- ✅ Reduced file sizes (all < 300 lines)
-- ✅ Added comprehensive docstrings
-- ✅ Improved type safety
+- Refactored code into modules
+- Reduced file sizes (all < 300 lines)
+- Added comprehensive docstrings
+- Improved type safety
 
 ### v3.0.0 (2026-01-04)
 - Initial Brain3D implementation
