@@ -1,0 +1,17 @@
+{
+  "tasks": [
+    {
+      "id": "daily-health-check",
+      "name": "Daily Health Check",
+      "description": "Daily health check and state refresh verification",
+      "schedule": "0 2 * * *",
+      "command": {
+        "type": "endpoint",
+        "endpoint": "/health",
+        "method": "GET",
+        "timeout_seconds": 30
+      },
+      "enabled": true
+    }
+  ]
+}
