@@ -31,11 +31,11 @@ class OverlayEnricher:
         Returns:
             True si chargement reussi, False sinon.
         """
-        if not self._path.exists():
-            logger.warning(f"Overlay file not found: {self._path}")
-            return False
-
         try:
+            if not self._path.exists():
+                logger.warning(f"Overlay file not found: {self._path}")
+                return False
+
             content = self._path.read_text(encoding="utf-8")
             data = yaml.safe_load(content)
             self._devices = data.get("devices", {})
@@ -45,7 +45,7 @@ class OverlayEnricher:
             )
             return True
         except Exception as e:
-            logger.error(f"Error loading overlay: {e}")
+            logger.warning(f"Overlay unavailable ({self._path}): {e}")
             return False
 
     def enrich_machine(self, machine: Machine) -> Machine:
